@@ -17,7 +17,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-test-key-change-in-prod')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = ["*"]  # Geliştirme aşamasında her yerden erişime izin ver
 
@@ -51,6 +51,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     
     'corsheaders.middleware.CorsMiddleware', 
     
@@ -85,10 +86,9 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    'default': config(
-        'DATABASE_URL',
+    'default': dj_database_url.config(
         default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
-        cast=dj_database_url.parse
+        conn_max_age=600
     )
 }
 
@@ -124,7 +124,8 @@ USE_TZ = True
 
 # --- STATİK VE MEDYA DOSYALARI ---
 STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # --- CLOUDINARY AYARLARI ---
 CLOUDINARY_STORAGE = {
@@ -139,14 +140,9 @@ STORAGES = {
         'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
     },
     'staticfiles': {
-        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
-
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # --- CORS AYARLARI (Next.js için) ---
 CORS_ALLOW_ALL_ORIGINS = True 
