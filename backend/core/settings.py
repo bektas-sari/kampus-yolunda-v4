@@ -100,7 +100,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
         'OPTIONS': {
-            'MIN_LENGTH': 8, # En az 8 karakter
+            'min_length': 8, # En az 8 karakter
         }
     },
     {
@@ -155,6 +155,7 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://kampus-backend-4wes.onrender.com",
 ]
 
 # --- REST FRAMEWORK AYARLARI ---
