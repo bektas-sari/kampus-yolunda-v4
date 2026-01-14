@@ -123,7 +123,7 @@ USE_L10N = True
 USE_TZ = True
 
 # --- STATİK VE MEDYA DOSYALARI ---
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
