@@ -38,7 +38,7 @@ export default function BurslarPage() {
         async function fetchScholarships() {
             try {
                 // API isteği
-                const res = await axios.get("http://127.0.0.1:8000/api/scholarships/");
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/scholarships/`);
                 const data = res.data;
 
                 // 2. KRİTİK NOKTA: Backend ne gönderirse göndersin, biz onu DİZİYE çeviriyoruz

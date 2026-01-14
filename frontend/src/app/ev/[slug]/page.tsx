@@ -45,7 +45,7 @@ const DynamicIcon = ({ name, className }: { name: string; className?: string }) 
 const getImageUrl = (path: string | null) => {
     if (!path) return "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=2070&auto=format&fit=crop";
     if (path.startsWith("http")) return path;
-    return `http://127.0.0.1:8000${path}`;
+    return `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}${path}`;
 };
 
 export default function StudentHouseDetailPage() {
@@ -66,7 +66,7 @@ export default function StudentHouseDetailPage() {
 
             try {
                 // 1. Ev Detayını Çek
-                const response = await axios.get(`http://127.0.0.1:8000/api/houses/${slug}/`);
+                const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/houses/${slug}/`);
                 const houseData = response.data;
                 setData(houseData);
 
@@ -75,7 +75,7 @@ export default function StudentHouseDetailPage() {
                 // user true ise ve token varsa kontrol et
                 if (user && token && houseData.id) {
                     try {
-                        const favResponse = await axios.get('http://127.0.0.1:8000/api/favorites/', {
+                        const favResponse = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/`, {
                             headers: { Authorization: `Bearer ${token}` }
                         });
                         const favorites = favResponse.data;
@@ -97,7 +97,7 @@ export default function StudentHouseDetailPage() {
 
                 // Fallback: Slug ile detay endpoint'i çalışmazsa listeyi tara (Eski Yöntem)
                 try {
-                    const listRes = await axios.get(`http://127.0.0.1:8000/api/houses/?slug=${slug}`);
+                    const listRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/houses/?slug=${slug}`);
                     if (listRes.data && listRes.data.length > 0) {
                         setData(listRes.data[0]);
                     }
@@ -129,7 +129,7 @@ export default function StudentHouseDetailPage() {
             const previousState = isLiked;
             setIsLiked(!isLiked);
 
-            const response = await axios.post('http://127.0.0.1:8000/api/favorites/toggle/',
+            const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/toggle/`,
                 { student_house_id: data?.id },
                 { headers: { Authorization: `Bearer ${token}` } }
             );

@@ -16,7 +16,7 @@ interface HouseDetailModalProps {
 const getImageUrl = (path: string | null) => {
     if (!path) return "/placeholder_house.jpg";
     if (path.startsWith("http")) return path;
-    return `http://127.0.0.1:8000${path}`;
+    return `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}${path}`;
 };
 
 // --- DİNAMİK İKON BİLEŞENİ ---

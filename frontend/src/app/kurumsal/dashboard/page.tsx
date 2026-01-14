@@ -55,7 +55,7 @@ export default function DashboardPage() {
 
             try {
                 // 2. ADIM: İSTEĞİ ANAHTARLA BERABER GÖNDER
-                const res = await axios.get('http://127.0.0.1:8000/api/dashboard/stats/', {
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/dashboard/stats/`, {
                     headers: {
                         'Authorization': `Bearer ${token}` // <-- İŞTE SİHİRLİ KELİME
                     }
@@ -236,7 +236,7 @@ export default function DashboardPage() {
                                             {comp.name}
                                         </span>
                                         <span className={`text-sm font-bold ${comp.rate === 'Pazar Lideri' ? 'text-[#00ff88]' :
-                                                comp.rate === 'Ortalama Altı' ? 'text-red-500' : 'text-yellow-500'
+                                            comp.rate === 'Ortalama Altı' ? 'text-red-500' : 'text-yellow-500'
                                             }`}>
                                             {comp.rate}
                                         </span>

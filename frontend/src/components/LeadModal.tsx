@@ -66,7 +66,7 @@ export default function LeadModal({ isOpen, onClose, universityName, sourceType 
 
         try {
             // Backend'e gönder
-            await axios.post("http://127.0.0.1:8000/api/leads/create/", {
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/leads/create/`, {
                 lead_type: sourceType === 'house' ? 'INFO_REQUEST' : 'INFO_REQUEST', // İlerde özelleştirilebilir
                 name: formData.name,
                 email: formData.email,

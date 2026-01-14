@@ -57,7 +57,7 @@ const getImageUrl = (path: string | null) => {
     if (path.startsWith("http")) return path;
 
     // 3. Eğer backend'den gelen relative path ise (/media/...) başına localhost ekle
-    return `http://127.0.0.1:8000${path}`;
+    return `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}${path}`;
 };
 
 import axios from "axios";
@@ -83,10 +83,10 @@ export default function DormitoryDetailPage() {
             try {
                 // 1. Yurt Datası
                 let dormData = null;
-                const detailRes = await fetch(`http://127.0.0.1:8000/api/dormitories/${slug}/`);
+                const detailRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/dormitories/${slug}/`);
 
                 if (!detailRes.ok) {
-                    const listRes = await fetch(`http://127.0.0.1:8000/api/dormitories/?slug=${slug}`);
+                    const listRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/dormitories/?slug=${slug}`);
                     const listData = await listRes.json();
                     if (listData && listData.length > 0) {
                         dormData = listData[0];
@@ -102,7 +102,7 @@ export default function DormitoryDetailPage() {
                 const token = localStorage.getItem('access');
                 if (token && dormData) {
                     try {
-                        const favRes = await axios.get('http://127.0.0.1:8000/api/favorites/dormitories/', {
+                        const favRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/dormitories/`, {
                             headers: { Authorization: `Bearer ${token}` }
                         });
                         const isFavorited = favRes.data.some((fav: any) => fav.dormitory.id === dormData.id);
@@ -137,7 +137,7 @@ export default function DormitoryDetailPage() {
         const token = localStorage.getItem('access');
 
         try {
-            const res = await axios.post('http://127.0.0.1:8000/api/favorites/dormitories/toggle/',
+            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/dormitories/toggle/`,
                 { dormitory_id: data.id },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -173,7 +173,7 @@ export default function DormitoryDetailPage() {
                 <div className="absolute bottom-0 left-0 w-full p-6 md:p-10 container mx-auto">
                     <div className="flex flex-wrap gap-2 mb-3">
                         <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider ${data.dorm_type === 'KIZ' ? 'bg-pink-500/80 text-white' :
-                                data.dorm_type === 'ERKEK' ? 'bg-blue-500/80 text-white' : 'bg-purple-500/80 text-white'
+                            data.dorm_type === 'ERKEK' ? 'bg-blue-500/80 text-white' : 'bg-purple-500/80 text-white'
                             }`}>
                             {data.dorm_type} YURDU
                         </span>

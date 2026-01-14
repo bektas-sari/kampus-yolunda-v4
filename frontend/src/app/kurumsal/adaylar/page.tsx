@@ -25,7 +25,7 @@ export default function CandidatesPage() {
             try {
                 // Token'ı almayı unutma, çünkü burası korumalı alan
                 const token = localStorage.getItem('access');
-                const res = await axios.get('http://127.0.0.1:8000/api/dashboard/leads/', {
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/dashboard/leads/`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setLeads(res.data);
@@ -115,8 +115,8 @@ export default function CandidatesPage() {
                                         </td>
                                         <td className="p-5">
                                             <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${lead.lead_type === 'SCHOLARSHIP' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                                                    lead.lead_type === 'INFO_REQUEST' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                        'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                                                lead.lead_type === 'INFO_REQUEST' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                    'bg-gray-500/10 text-gray-400 border-gray-500/20'
                                                 }`}>
                                                 {lead.lead_type === 'SCHOLARSHIP' ? 'Burs Başvurusu' :
                                                     lead.lead_type === 'INFO_REQUEST' ? 'Bilgi Talebi' : lead.lead_type}

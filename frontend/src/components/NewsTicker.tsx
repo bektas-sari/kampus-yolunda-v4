@@ -26,7 +26,7 @@ export default function NewsTicker() {
 
     async function fetchNews() {
       try {
-        const res = await axios.get("http://127.0.0.1:8000/api/news/");
+        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/news/`);
         let data: NewsItem[] = [];
 
         if (Array.isArray(res.data)) {

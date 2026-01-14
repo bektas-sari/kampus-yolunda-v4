@@ -89,20 +89,20 @@ export default function ProfilePage() {
             setLoading(true);
             try {
                 // 1. User Data
-                const userRes = await axios.get('http://127.0.0.1:8000/api/user/', { headers: { Authorization: `Bearer ${token}` } });
+                const userRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/user/`, { headers: { Authorization: `Bearer ${token}` } });
                 setUserData(userRes.data);
 
                 // 2. Favorites - Universities
-                const uniRes = await axios.get('http://127.0.0.1:8000/api/favorites/universities/', { headers: { Authorization: `Bearer ${token}` } });
+                const uniRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/universities/`, { headers: { Authorization: `Bearer ${token}` } });
                 setFavUniversities(uniRes.data);
 
                 // 3. Favorites - Dormitories
-                const dormRes = await axios.get('http://127.0.0.1:8000/api/favorites/dormitories/', { headers: { Authorization: `Bearer ${token}` } });
+                const dormRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/dormitories/`, { headers: { Authorization: `Bearer ${token}` } });
                 setFavDorms(dormRes.data);
 
                 // 4. Favorites - Houses
                 // Not: House fav endpointi 'api/favorites/' olarak tanımlı
-                const houseRes = await axios.get('http://127.0.0.1:8000/api/favorites/', { headers: { Authorization: `Bearer ${token}` } });
+                const houseRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/favorites/`, { headers: { Authorization: `Bearer ${token}` } });
                 setFavHouses(houseRes.data);
 
             } catch (error: any) {
@@ -136,7 +136,7 @@ export default function ProfilePage() {
     const getImageUrl = (path: string | null) => {
         if (!path) return "/placeholder.jpg";
         if (path.startsWith("http")) return path;
-        return `http://127.0.0.1:8000${path}`;
+        return `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}${path}`;
     };
 
     return (
