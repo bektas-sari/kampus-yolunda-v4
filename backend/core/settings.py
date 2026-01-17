@@ -134,6 +134,8 @@ STORAGES = {
         "BACKEND": "cloudinary_storage.storage.StaticCloudinaryStorage",
     },
 }
+# --- DUZELTME: Cloudinary kütüphanesi bu eski ayarı mutlaka istiyor ---
+STATICFILES_STORAGE = 'cloudinary_storage.storage.StaticCloudinaryStorage'
 
 # --- CLOUDINARY AYARLARI ---
 CLOUDINARY_STORAGE = {
