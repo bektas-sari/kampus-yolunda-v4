@@ -123,20 +123,18 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = '/media/'
 
-# Django 4.2+ Modern Depolama Yapısı
 STORAGES = {
-    # Medya (Resimler) -> Cloudinary
     "default": {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
     },
-    # Statik (CSS/JS) -> WhiteNoise (Render için optimize edilmiş)
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        # "Manifest" kelimesini sildik -> Hata veren dosya kontrolü kapandi.
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
-    
 }
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-WHITENOISE_MANIFEST_STRICT = False
+
+# Eski versiyonlar ve Cloudinary uyumlulugu icin bunu da guncelliyoruz:
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # --- CLOUDINARY AYARLARI ---
 CLOUDINARY_STORAGE = {
