@@ -10,19 +10,19 @@ from rest_framework_simplejwt.views import (
 )
 
 urlpatterns = [
-    # Admin
+    # Admin Paneli
     path('admin/', admin.site.urls),
 
-    # App APIs
-    # (Assuming your main app urls are at api/urls.py)
-    path('api/', include('api.urls')), 
+    # Ana API Rotaları
+    path('api/', include('api.urls')),
 
-    # Auth Endpoints (JWT) - MUST BE EXPLICIT
+    # Kimlik Doğrulama (JWT) Endpoint'leri
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
 
-# Media & Static Files Serving (Development only)
+# Geliştirme ortamında (Localhost) medya ve statik dosyaları Django sunar.
+# Canlıda (Production) bu işi Cloudinary ve WhiteNoise yapar.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
