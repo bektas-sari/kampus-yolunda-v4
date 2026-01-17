@@ -136,6 +136,7 @@ STORAGES = {
     
 }
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_MANIFEST_STRICT = False
 
 # --- CLOUDINARY AYARLARI ---
 CLOUDINARY_STORAGE = {
