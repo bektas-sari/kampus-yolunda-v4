@@ -123,18 +123,20 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = '/media/'
 
+# --- DUZELTME: WhiteNoise Sıkıştırma Hatalarını Kapatmak İçin ---
+# Standart Django depolama sistemine geçiyoruz. Dosyalar sıkışmayacak ama hata da vermeyecek.
+
 STORAGES = {
     "default": {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
     },
     "staticfiles": {
-        # "Manifest" kelimesini sildik -> Hata veren dosya kontrolü kapandi.
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 
-# Eski versiyonlar ve Cloudinary uyumlulugu icin bunu da guncelliyoruz:
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# Eski ayarı da standart hale getiriyoruz:
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # --- CLOUDINARY AYARLARI ---
 CLOUDINARY_STORAGE = {
