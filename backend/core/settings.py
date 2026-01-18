@@ -3,10 +3,10 @@ Django settings for core project.
 Kampusyolunda - Kognitect Mimari Yapısı (Production Ready)
 """
 
+import dj_database_url
 from decouple import config
 from pathlib import Path
 import os
-import dj_database_url
 from django.urls import reverse_lazy
 from datetime import timedelta
 
@@ -95,9 +95,8 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Render'da DATABASE_URL varsa onu kullanır, yoksa yerel db.sqlite3'e düşer.
 DATABASES = {
     'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
-        conn_max_age=600,
-        ssl_require=True # Supabase için SSL şart
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=600
     )
 }
 # Lokal geliştirme için SSL hatasını önlemek adına (Opsiyonel hack):
