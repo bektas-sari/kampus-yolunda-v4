@@ -95,7 +95,6 @@ class CampusVenue(models.Model):
     rating = models.DecimalField(max_digits=3, decimal_places=1, default=5.0, verbose_name="Puan (5 üzerinden)")
     distance = models.CharField(max_length=50, verbose_name="Uzaklık Bilgisi")
     is_sponsored = models.BooleanField(default=False, verbose_name="Sponsorlu Mekan")
-    is_sponsored = models.BooleanField(default=False, verbose_name="Sponsorlu Mekan")
     discount_text = models.CharField(max_length=100, blank=True, verbose_name="İndirim Metni")
     
     description = models.TextField(blank=True, verbose_name="Mekan Açıklaması")
@@ -284,6 +283,7 @@ class Scholarship(models.Model):
         verbose_name_plural = "Burs Fırsatları"
     def __str__(self): return self.title
 
+# --- HABERLER (Temizlendi: Embed/Show alanları kaldırıldı) ---
 class News(models.Model):
     CATEGORY_CHOICES = [('Gundem', 'Gündem'), ('Sinav', 'Sınav'), ('Kariyer', 'Kariyer'), ('Yasam', 'Yaşam'), ('Teknoloji', 'Teknoloji'), ('Burslar', 'Burslar')]
     
@@ -292,6 +292,7 @@ class News(models.Model):
     cover_image = models.ImageField(upload_to='news/covers/', verbose_name="Kapak Resmi")
     summary = models.TextField(max_length=300, blank=True, null=True, verbose_name="Özet (Kısa Açıklama)")
     content = models.TextField(verbose_name="İçerik")
+    
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='Yasam', verbose_name="Kategori")
     author = models.CharField(max_length=100, default="Kampüs Editör", verbose_name="Yazar")
     is_published = models.BooleanField(default=True, verbose_name="Yayında mı?")
@@ -303,8 +304,10 @@ class News(models.Model):
     class Meta: 
         verbose_name = "Haber"
         verbose_name_plural = "Haberler"
+        ordering = ['-published_at']
     
     def __str__(self): return self.title
+    
     def save(self, *args, **kwargs):
         if not self.slug:
             from django.utils.text import slugify
@@ -312,9 +315,7 @@ class News(models.Model):
             self.slug = f"{slugify(self.title)}-{str(uuid.uuid4())[:8]}"
         super().save(*args, **kwargs)
 
-
-# --- ANALİTİK VE RAPORLAMA ---
-
+# --- İSTATİSTİKLER ---
 class UniversityStats(models.Model):
     university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='daily_stats', verbose_name="Üniversite")
     date = models.DateField(auto_now_add=True, verbose_name="Tarih")
@@ -345,6 +346,7 @@ class DepartmentStats(models.Model):
         verbose_name = "Bölüm İstatistiği"
         verbose_name_plural = "Bölüm İstatistikleri"
 
+# --- LEAD (FORM BAŞVURULARI) ---
 class Lead(models.Model):
     LEAD_TYPES = (
         ('SCHOLARSHIP', 'Burs Başvurusu'),
@@ -373,14 +375,11 @@ class Lead(models.Model):
     def __str__(self):
         return f"{self.get_lead_type_display()} - {self.name}"
 
-# backend/api/models.py
-
-# ... (University ve StudentHouse modelleri yukarıda kalacak)
+# --- DİĞER BAĞLANTILAR ---
 
 class StudentHouseConnection(models.Model):
     """
     Bir Üniversite ile Bir Öğrenci Evi arasındaki bağlantıyı ve mesafeyi tutar.
-    Bu sayede bir ev, birden fazla üniversiteye 'yakın' olarak eklenebilir.
     """
     university = models.ForeignKey(
         'University', 
@@ -407,12 +406,10 @@ class StudentHouseConnection(models.Model):
     class Meta:
         verbose_name = "Üniversiteye Yakın Ev Bağlantısı"
         verbose_name_plural = "Üniversiteye Yakın Ev Bağlantıları"
-        unique_together = ('university', 'house') # Aynı evi aynı üniversiteye 2 kere eklemeyi engeller
+        unique_together = ('university', 'house') 
 
     def __str__(self):
         return f"{self.university.name} - {self.house.title}"
-
-# --- MEVCUT IMPORTLARIN ALTINA EKLE ---
 
 class Promotion(models.Model):
     university = models.OneToOneField(University, on_delete=models.CASCADE, related_name='promotion')
@@ -428,7 +425,6 @@ class Promotion(models.Model):
     def __str__(self):
         return f"Reklam: {self.university.name}"
 
-# --- YORUM SİSTEMİ (REVIEW) ---
 class Review(models.Model):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Kullanıcı")
     author_name = models.CharField(max_length=100, default="Misafir Kullanıcı", verbose_name="Yaz görünen Ad")
@@ -450,3 +446,33 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.author_name} - {self.content_type.model} ({self.rating} Puan)"
+
+# --- YENİ MODEL: KAMPÜS REELS / VİDEO GALERİ ---
+class CampusReel(models.Model):
+    title = models.CharField(max_length=255, verbose_name="Video Başlığı")
+    
+    # İlişki: Bu video hangi üniversiteye ait? (Boş bırakılırsa genel videodur)
+    university = models.ForeignKey(
+        'University', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='reels', 
+        verbose_name="İlgili Üniversite"
+    )
+    
+    embed_code = models.TextField(
+        verbose_name="Embed Kodu",
+        help_text="Instagram/Youtube embed kodunu buraya yapıştırın."
+    )
+    
+    show_on_homepage = models.BooleanField(default=False, verbose_name="Anasayfa Vitrininde Göster")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Eklenme Tarihi")
+
+    class Meta:
+        verbose_name = "Kampüs Reels / Video"
+        verbose_name_plural = "Kampüs Reels Videoları"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.university.name if self.university else 'Genel'}"

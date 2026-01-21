@@ -1,59 +1,55 @@
-from django.urls import path
-from .views import (
-    UniversityList, UniversityDetail,
-    DepartmentList,
-    DormitoryList, DormitoryDetail,
-    StudentHouseList, StudentHouseDetail,
-    ScholarshipList, ScholarshipDetail,
-    NewsList, NewsDetail, BreakingNewsList,
-    RegisterView, ManageUserView,
-    FavoriteToggleView, FavoriteListView,
-    FavoriteUniversityToggleView, FavoriteUniversityListView,
-    FavoriteDormitoryToggleView, FavoriteDormitoryListView,
-    TrackActivityView, CreateLeadView, CreateReviewView
-)
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from . import views
 
+# --- ROUTER KURULUMU ---
+# Router, viewset'leri otomatik olarak URL'lere bağlar.
+# Örn: /api/universities/ -> Listeleme
+# Örn: /api/universities/odtu/ -> Detay gösterme
+router = DefaultRouter()
+
+# 1. ANA MODELLER
+router.register(r'universities', views.UniversityViewSet)
+router.register(r'departments', views.DepartmentViewSet)
+router.register(r'venues', views.CampusVenueViewSet)
+
+# 2. KONAKLAMA (Yurt & Ev)
+router.register(r'dormitories', views.DormitoryViewSet)
+router.register(r'student-houses', views.StudentHouseViewSet)
+
+# 3. İÇERİK VE MEDYA
+router.register(r'news', views.NewsViewSet)
+router.register(r'scholarships', views.ScholarshipViewSet)
+router.register(r'promotions', views.PromotionViewSet)
+router.register(r'reels', views.CampusReelViewSet) # Yeni eklediğimiz Reels sistemi
+
+# 4. GENEL VE ETKİLEŞİM
+router.register(r'features', views.FeatureViewSet)
+router.register(r'leads', views.LeadViewSet)
+router.register(r'reviews', views.ReviewViewSet)
+
+# --- URL PATTERNS ---
 urlpatterns = [
-    # --- ÜNİVERSİTELER ---
-    path('universities/', UniversityList.as_view(), name='university-list'),
-    path('universities/<slug:slug>/', UniversityDetail.as_view(), name='university-detail'),
+    # Router tarafından oluşturulan tüm URL'leri buraya dahil ediyoruz
+    path('', include(router.urls)),
 
-    # --- BÖLÜMLER ---
-    path('departments/', DepartmentList.as_view(), name='department-list'),
-
-    # --- YURTLAR ---
-    path('dormitories/', DormitoryList.as_view(), name='dormitory-list'),
-    path('dormitories/<slug:slug>/', DormitoryDetail.as_view(), name='dormitory-detail'),
-
-    # --- ÖĞRENCİ EVLERİ (Hata buradaydı, şimdi eklendi) ---
-    path('houses/', StudentHouseList.as_view(), name='student-house-list'),
-    path('houses/<slug:slug>/', StudentHouseDetail.as_view(), name='student-house-detail'),
-
-    # --- HABERLER ---
-    path('news/', NewsList.as_view(), name='news-list'),
-    path('news/breaking/', BreakingNewsList.as_view(), name='news-breaking'),
-    path('news/<slug:slug>/', NewsDetail.as_view(), name='news-detail'),
-
-    # --- BURSLAR ---
-    path('scholarships/', ScholarshipList.as_view(), name='scholarship-list'),
-    path('scholarships/<slug:slug>/', ScholarshipDetail.as_view(), name='scholarship-detail'),
-
-    # --- KULLANICI & AUTH ---
-    path('auth/register/', RegisterView.as_view(), name='register'),
-    path('auth/me/', ManageUserView.as_view(), name='me'),
-
-    # --- FAVORİLER ---
-    path('favorites/houses/', FavoriteListView.as_view(), name='fav-houses'),
-    path('favorites/houses/toggle/', FavoriteToggleView.as_view(), name='fav-houses-toggle'),
-    path('favorites/universities/', FavoriteUniversityListView.as_view(), name='fav-uni'),
-    path('favorites/universities/toggle/', FavoriteUniversityToggleView.as_view(), name='fav-uni-toggle'),
-    path('favorites/dormitories/', FavoriteDormitoryListView.as_view(), name='fav-dorm'),
-    path('favorites/dormitories/toggle/', FavoriteDormitoryToggleView.as_view(), name='fav-dorm-toggle'),
-
-    # --- ANALİTİK VE FORM (LEAD) ---
-    path('track-activity/', TrackActivityView.as_view(), name='track-activity'),
-    path('leads/create/', CreateLeadView.as_view(), name='create-lead'),
+    # --- ROUTER DIŞI ÖZEL URL'LER (Manuel Tanımlamalar) ---
+    # Router standart CRUD işlemleri içindir. Özel işlemler (Login, Register, vb.) burada kalır.
     
-    # --- YORUM OLUŞTURMA ---
-    path('reviews/create/', CreateReviewView.as_view(), name='create-review'),
+    # Kullanıcı & Auth
+    path('auth/register/', views.RegisterView.as_view(), name='register'),
+    path('auth/me/', views.ManageUserView.as_view(), name='me'),
+
+    # Favoriler (Toggle ve Liste)
+    path('favorites/houses/', views.FavoriteListView.as_view(), name='fav-houses'),
+    path('favorites/houses/toggle/', views.FavoriteToggleView.as_view(), name='fav-houses-toggle'),
+    
+    path('favorites/universities/', views.FavoriteUniversityListView.as_view(), name='fav-uni'),
+    path('favorites/universities/toggle/', views.FavoriteUniversityToggleView.as_view(), name='fav-uni-toggle'),
+    
+    path('favorites/dormitories/', views.FavoriteDormitoryListView.as_view(), name='fav-dorm'),
+    path('favorites/dormitories/toggle/', views.FavoriteDormitoryToggleView.as_view(), name='fav-dorm-toggle'),
+
+    # Analitik
+    path('track-activity/', views.TrackActivityView.as_view(), name='track-activity'),
 ]

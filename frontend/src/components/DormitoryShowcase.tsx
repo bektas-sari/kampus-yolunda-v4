@@ -51,7 +51,7 @@ export default function DormitoryShowcase() {
       try {
         const [dormRes, houseRes] = await Promise.all([
           axios.get(`${BACKEND_URL}/api/dormitories/?is_promoted=true`),
-          axios.get(`${BACKEND_URL}/api/houses/?is_promoted=true`)
+          axios.get(`${BACKEND_URL}/api/student-houses/?is_promoted=true`)
         ]);
         setDormitories(dormRes.data.results || dormRes.data || []);
         setHouses(houseRes.data.results || houseRes.data || []);

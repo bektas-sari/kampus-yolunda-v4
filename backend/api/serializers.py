@@ -7,7 +7,7 @@ from .models import (
     StudentHouse, HouseImage, Feature,
     FavoriteUniversity, FavoriteDormitory, FavoriteStudentHouse,
     Scholarship, News, Lead,
-    StudentHouseConnection, Promotion, Review # Review EKLENDİ
+    StudentHouseConnection, Promotion, Review, CampusReel
 )
 
 # --- 1. TEMEL VE YARDIMCI SERIALIZERS ---
@@ -316,3 +316,11 @@ class LeadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lead
         fields = '__all__'
+
+class CampusReelSerializer(serializers.ModelSerializer):
+    university_name = serializers.ReadOnlyField(source='university.name')
+    university_slug = serializers.ReadOnlyField(source='university.slug')
+
+    class Meta:
+        model = CampusReel
+        fields = ['id', 'title', 'embed_code', 'university_name', 'university_slug', 'show_on_homepage']
