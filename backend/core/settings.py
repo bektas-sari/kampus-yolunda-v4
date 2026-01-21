@@ -14,16 +14,16 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- GÜVENLİK AYARLARI ---
-# Production'da SECRET_KEY env'den gelmeli, yoksa hata vermeli veya fallback kullanmalı.
+# Production'da SECRET_KEY env'den gelmeli.
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-test-key-change-in-prod')
 
-# Production'da bu KESİNLİKLE False olmalı. Render env variable ile yöneteceğiz.
+# Production'da bu KESİNLİKLE False olmalı.
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Render ve Vercel için Host Ayarları
-ALLOWED_HOSTS = ['*'] # Nginx/Render önünde durduğu için * kalabilir, güvenlik CSRF ile sağlanıyor.
+ALLOWED_HOSTS = ['*']
 
-# CSRF Güvenliği (Markdown linkleri temizlendi)
+# CSRF Güvenliği
 CSRF_TRUSTED_ORIGINS = [
     'https://kampus-backend-4wes.onrender.com',
     'https://kampus-yolunda.vercel.app',
@@ -62,9 +62,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # Static dosyalar için kritik
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware', # Sadece 1 kere olmalı!
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -91,17 +91,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-# --- VERİTABANI AYARLARI (SUPABASE & SQLITE) ---
-# Render'da DATABASE_URL varsa onu kullanır, yoksa yerel db.sqlite3'e düşer.
+# --- VERİTABANI AYARLARI ---
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL'),
         conn_max_age=600
     )
 }
-# Lokal geliştirme için SSL hatasını önlemek adına (Opsiyonel hack):
+# SQLite SSL Hack
 if 'sqlite' in DATABASES['default']['ENGINE']:
-    # 'OPTIONS' varsa siler, yoksa hata vermeden devam eder
     DATABASES['default'].pop('OPTIONS', None)
     
 # --- ŞİFRE GÜVENLİĞİ ---
@@ -118,13 +116,10 @@ TIME_ZONE = 'Europe/Istanbul'
 USE_I18N = True
 USE_TZ = True
 
-# --- STATİK VE MEDYA DOSYALARI (STORAGES API) ---
+# --- STATİK VE MEDYA DOSYALARI ---
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = '/media/'
-
-# --- DUZELTME: WhiteNoise Sıkıştırma Hatalarını Kapatmak İçin ---
-# Standart Django depolama sistemine geçiyoruz. Dosyalar sıkışmayacak ama hata da vermeyecek.
 
 STORAGES = {
     "default": {
@@ -134,7 +129,6 @@ STORAGES = {
         "BACKEND": "cloudinary_storage.storage.StaticCloudinaryStorage",
     },
 }
-# --- DUZELTME: Cloudinary kütüphanesi bu eski ayarı mutlaka istiyor ---
 STATICFILES_STORAGE = 'cloudinary_storage.storage.StaticCloudinaryStorage'
 
 # --- CLOUDINARY AYARLARI ---
@@ -144,10 +138,8 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
 }
 
-# --- CORS AYARLARI (Frontend İzni) ---
-# Güvenlik için False yapıp sadece izinli domainleri açıyoruz
+# --- CORS AYARLARI ---
 CORS_ALLOW_ALL_ORIGINS = False 
-
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -162,7 +154,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny', # Production'da IsAuthenticatedOrReadOnly önerilir ama şimdilik kalsın.
+        'rest_framework.permissions.AllowAny',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 12,
@@ -189,7 +181,7 @@ JAZZMIN_SETTINGS = {
     "site_brand": "Yönetim Paneli",
     "welcome_sign": "Kampüs Yolunda Yönetim Paneline Hoşgeldiniz",
     "copyright": "Kognitect Teknoloji A.Ş.",
-    "search_model": ["api.University", "api.Department", "api.CampusReel"], # <-- ARAMAYA DA EKLEYELİM
+    "search_model": ["api.University", "api.Department", "api.CampusReel"],
     "topmenu_links": [
         {"name": "Siteyi Görüntüle", "url": "https://kampusyolunda.com", "new_window": True},
         {"model": "auth.User"},
@@ -198,7 +190,8 @@ JAZZMIN_SETTINGS = {
     "show_sidebar": True,
     "navigation_expanded": True,
     
-    # --- İKON AYARLARI (BURAYA EKLE) ---
+    # --- İKON AYARLARI ---
+    # CampusReel buradan kaldırıldı (Otomatik görünmesi için)
     "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
@@ -206,21 +199,18 @@ JAZZMIN_SETTINGS = {
         "api.Department": "fas fa-graduation-cap",
         "api.Dormitory": "fas fa-bed",
         "api.News": "fas fa-newspaper",
-        
-        # YENİ EKLENECEK SATIR:
-        "api.CampusReel": "fas fa-play-circle", 
     },
     
-    # --- SIRALAMA AYARLARI (BURAYA EKLE) ---
-    # Bu liste menüdeki sırayı belirler. Reels'i Haberler'in yanına koyabilirsin.
+    # --- SIRALAMA AYARLARI ---
+    # CampusReel buradan kaldırıldı (Otomatik görünmesi için)
     "order_with_respect_to": [
         "api.University", 
         "api.Department", 
         "api.Dormitory", 
-        "api.CampusReel", # <-- BURAYA EKLE
         "api.News"
     ],
 }
+
 JAZZMIN_UI_TWEAKS = {
     "theme": "flatly",
     "dark_mode_theme": "darkly",
