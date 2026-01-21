@@ -14,7 +14,8 @@ interface NewsDetail {
     title: string;
     slug: string;
     cover_image: string | null;
-    content: string; // HTML veya düz metin olabilir
+    summary: string | null; // DÜZELTİLDİ: Backend'deki isim 'summary'
+    content: string;
     category: string;
     author: string;
     published_at: string;
@@ -139,8 +140,20 @@ export default function NewsDetailPage() {
 
                 {/* Main Content */}
                 <div className="lg:col-span-8">
+
+                    {/* --- ÖZET ALANI (DÜZELTİLDİ) --- */}
+                    {/* Backend 'summary' olarak gönderiyor */}
+                    {news.summary && (
+                        <div className="mb-10">
+                            <p className="text-xl md:text-2xl text-gray-300 italic font-medium leading-relaxed border-l-4 border-[#00ff88] pl-6 py-2 bg-white/5 rounded-r-lg">
+                                {news.summary}
+                            </p>
+                        </div>
+                    )}
+                    {/* --- ÖZET ALANI BİTİŞ --- */}
+
                     <article className="prose prose-invert prose-lg max-w-none text-gray-300">
-                        {/* Eğer HTML geliyorsa dangerouslySetInnerHTML kullan, düz metinse p tagi */}
+                        {/* İçerik */}
                         <div className="whitespace-pre-line leading-relaxed">
                             {news.content}
                         </div>

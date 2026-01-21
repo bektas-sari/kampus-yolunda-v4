@@ -101,8 +101,9 @@ DATABASES = {
 }
 # Lokal geliştirme için SSL hatasını önlemek adına (Opsiyonel hack):
 if 'sqlite' in DATABASES['default']['ENGINE']:
-    del DATABASES['default']['OPTIONS']  # SQLite SSL desteklemez
-
+    # 'OPTIONS' varsa siler, yoksa hata vermeden devam eder
+    DATABASES['default'].pop('OPTIONS', None)
+    
 # --- ŞİFRE GÜVENLİĞİ ---
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
