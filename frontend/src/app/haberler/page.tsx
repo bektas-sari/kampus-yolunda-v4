@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import axios from "axios";
-import { Calendar, Clock, ChevronRight, Loader2, AlertCircle } from "lucide-react";
+import { Calendar, Clock, ChevronRight, ChevronLeft, Loader2, AlertCircle, User } from "lucide-react";
 
 // Backend URL
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -14,35 +14,59 @@ interface NewsItem {
   title: string;
   slug: string;
   cover_image: string | null;
-  summary: string;
+  summary: string | null;
   category: string;
   published_at: string;
   author: string;
+}
+
+// Django Pagination Yapısı (Backend'den gelen veri paketi)
+interface NewsResponse {
+  count: number; // Toplam haber sayısı
+  next: string | null;
+  previous: string | null;
+  results: NewsItem[]; // O sayfadaki haberler
 }
 
 export default function NewsPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchNews = async () => {
-      try {
-        const res = await axios.get(`${BACKEND_URL}/api/news/`);
-        // Backend pagination (results) dönüyor mu kontrol et
-        const data = Array.isArray(res.data) ? res.data : (res.data.results || []);
-        setNews(data);
-      } catch (error) {
-        console.error("Haberler çekilemedi:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // --- SAYFALAMA STATE'LERİ ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 12; // Backend'deki settings.py ile aynı olmalı
 
-    fetchNews();
-  }, []);
+  const fetchNews = async (page: number) => {
+    setLoading(true);
+    try {
+      // Sayfa numarasına göre istek atıyoruz: api/news/?page=2
+      const res = await axios.get<NewsResponse>(`${BACKEND_URL}/api/news/?page=${page}`);
+
+      // Gelen veriyi işle
+      setNews(res.data.results);
+
+      // Toplam sayfa sayısını hesapla (Toplam Kayıt / Sayfa Başına Adet)
+      // Örn: 17 kayıt / 12 = 1.41 -> Yukarı yuvarla -> 2 Sayfa
+      const calculatedTotalPages = Math.ceil(res.data.count / PAGE_SIZE);
+      setTotalPages(calculatedTotalPages);
+
+    } catch (error) {
+      console.error("Haberler çekilemedi:", error);
+    } finally {
+      setLoading(false);
+      // Sayfa değişince en üste kaydır
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Sayfa numarası değiştiğinde (veya ilk açılışta) çalışır
+  useEffect(() => {
+    fetchNews(currentPage);
+  }, [currentPage]);
 
   const getImageUrl = (path: string | null) => {
-    if (!path) return "/placeholder.jpg"; // Placeholder görselin yoksa bir tane ekle
+    if (!path) return "/placeholder.jpg";
     if (path.startsWith("http")) return path;
     return `${BACKEND_URL}${path}`;
   };
@@ -53,6 +77,13 @@ export default function NewsPage() {
       month: "long",
       year: "numeric",
     });
+  };
+
+  // Sayfa Değiştirme Fonksiyonu
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
   if (loading) {
@@ -74,57 +105,113 @@ export default function NewsPage() {
         </div>
 
         {news.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {news.map((item) => (
-              <Link
-                href={`/haberler/${item.slug}`} // BURASI KRİTİK: Doğru adrese gitmeli
-                key={item.id}
-                className="group bg-[#111] rounded-2xl overflow-hidden border border-white/10 hover:border-[#00ff88]/50 transition-all hover:-translate-y-2 hover:shadow-2xl"
-              >
-                {/* Görsel */}
-                <div className="relative h-56 w-full overflow-hidden">
-                  <Image
-                    src={getImageUrl(item.cover_image)}
-                    alt={item.title}
-                    fill
-                    className="object-cover group-hover:scale-110 transition-transform duration-700"
-                  />
-                  <div className="absolute top-4 left-4">
-                    <span className="bg-[#00ff88] text-black text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
-                      {item.category}
-                    </span>
-                  </div>
-                </div>
-
-                {/* İçerik */}
-                <div className="p-6">
-                  <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-                    <div className="flex items-center gap-1">
-                      <Calendar size={14} className="text-[#00ff88]" />
-                      {formatDate(item.published_at)}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock size={14} className="text-[#00ff88]" />
-                      3 dk okuma
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {news.map((item) => (
+                <Link
+                  href={`/haberler/${item.slug}`}
+                  key={item.id}
+                  className="group bg-[#111] rounded-2xl overflow-hidden border border-white/10 hover:border-[#00ff88]/50 transition-all hover:-translate-y-2 hover:shadow-2xl flex flex-col h-full"
+                >
+                  {/* Görsel */}
+                  <div className="relative h-56 w-full overflow-hidden">
+                    <Image
+                      src={getImageUrl(item.cover_image)}
+                      alt={item.title}
+                      fill
+                      className="object-cover group-hover:scale-110 transition-transform duration-700"
+                    />
+                    <div className="absolute top-4 left-4">
+                      <span className="bg-[#00ff88] text-black text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                        {item.category}
+                      </span>
                     </div>
                   </div>
 
-                  <h3 className="text-xl font-bold text-white mb-3 line-clamp-2 group-hover:text-[#00ff88] transition-colors">
-                    {item.title}
-                  </h3>
+                  {/* İçerik */}
+                  <div className="p-6 flex flex-col flex-grow">
+                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                      <div className="flex items-center gap-1">
+                        <Calendar size={14} className="text-[#00ff88]" />
+                        {formatDate(item.published_at)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock size={14} className="text-[#00ff88]" />
+                        3 dk okuma
+                      </div>
+                    </div>
 
-                  <p className="text-gray-400 text-sm line-clamp-3 mb-6">
-                    {item.summary}
-                  </p>
+                    <h3 className="text-xl font-bold text-white mb-3 line-clamp-2 group-hover:text-[#00ff88] transition-colors">
+                      {item.title}
+                    </h3>
 
-                  <div className="flex items-center text-[#00ff88] text-sm font-bold group/btn">
-                    Haberi Oku
-                    <ChevronRight size={16} className="ml-1 group-hover/btn:translate-x-1 transition-transform" />
+                    {item.summary && (
+                      <p className="text-gray-400 text-sm line-clamp-3 mb-6 flex-grow">
+                        {item.summary}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-white/10">
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <User size={14} />
+                        <span>{item.author || "Editör"}</span>
+                      </div>
+                      <div className="flex items-center text-[#00ff88] text-sm font-bold group/btn">
+                        Haberi Oku
+                        <ChevronRight size={16} className="ml-1 group-hover/btn:translate-x-1 transition-transform" />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+                </Link>
+              ))}
+            </div>
+
+            {/* --- PAGINATION (SAYFALANDIRMA BUTONLARI) --- */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-16">
+
+                {/* Önceki Sayfa */}
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className={`p-3 rounded-xl border flex items-center justify-center transition-all ${currentPage === 1
+                      ? "border-white/10 text-gray-700 cursor-not-allowed"
+                      : "border-white/20 text-white hover:bg-white/10 hover:border-[#00ff88] hover:text-[#00ff88]"
+                    }`}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+
+                {/* Sayfa Numaraları */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`w-12 h-12 rounded-xl font-bold border transition-all flex items-center justify-center ${currentPage === pageNum
+                        ? "bg-[#00ff88] text-black border-[#00ff88] shadow-[0_0_15px_rgba(0,255,136,0.3)]"
+                        : "bg-transparent text-white border-white/20 hover:border-[#00ff88] hover:text-[#00ff88]"
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+
+                {/* Sonraki Sayfa */}
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className={`p-3 rounded-xl border flex items-center justify-center transition-all ${currentPage === totalPages
+                      ? "border-white/10 text-gray-700 cursor-not-allowed"
+                      : "border-white/20 text-white hover:bg-white/10 hover:border-[#00ff88] hover:text-[#00ff88]"
+                    }`}
+                >
+                  <ChevronRight size={20} />
+                </button>
+
+              </div>
+            )}
+            {/* --- PAGINATION SONU --- */}
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-3xl bg-[#111]">
             <AlertCircle size={48} className="text-gray-600 mb-4" />
