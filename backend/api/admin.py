@@ -9,6 +9,7 @@ from .models import (
     StudentHouseConnection, Promotion, Review, CampusReel 
 )
 
+raise ValueError("BEKTAS HOCAM DOSYA OKUNUYOR, SORUN YOK!")
 
 class CampusReelAdmin(admin.ModelAdmin):
     list_display = ('title', 'university', 'show_on_homepage', 'created_at')
@@ -24,7 +25,7 @@ class CampusReelAdmin(admin.ModelAdmin):
         'embed_code', 
         'show_on_homepage'
     )
-    
+
 admin.site.register(CampusReel, CampusReelAdmin)
 # --- 1. YARDIMCI (INLINE) MODELLER ---
 
