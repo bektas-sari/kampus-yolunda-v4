@@ -209,3 +209,5 @@ class UniversityStatsAdmin(admin.ModelAdmin):
 class DepartmentStatsAdmin(admin.ModelAdmin):
     list_display = ('department', 'date', 'page_views')
     readonly_fields = ('department', 'date', 'page_views')
+
+# Vercel güncelleme tetikleyicisi 
