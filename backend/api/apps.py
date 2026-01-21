@@ -1,4 +1,3 @@
-# backend/api/apps.py
 from django.apps import AppConfig
 
 class ApiConfig(AppConfig):
@@ -6,5 +5,8 @@ class ApiConfig(AppConfig):
     name = 'api'
 
     def ready(self):
-        # Burası hayati önem taşıyor
-        import api.admin_fix
+        # Django baslarken bizim ozel admin dosyamizi zorla yukle
+        try:
+            import api.admin_fix
+        except ImportError:
+            pass
