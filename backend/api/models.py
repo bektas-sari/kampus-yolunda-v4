@@ -450,6 +450,19 @@ class Review(models.Model):
 # --- YENİ MODEL: KAMPÜS REELS / VİDEO GALERİ ---
 class CampusReel(models.Model):
     title = models.CharField(max_length=255, verbose_name="Video Başlığı")
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='reels', verbose_name="Üniversite")
+    embed_code = models.TextField(verbose_name="Embed Kodu (Instagram/YouTube)")
+    show_on_homepage = models.BooleanField(default=False, verbose_name="Anasayfada Göster")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Kampus Reel"
+        verbose_name_plural = "Kampus Reels Videolari"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
+    title = models.CharField(max_length=255, verbose_name="Video Başlığı")
     
     # İlişki: Bu video hangi üniversiteye ait? (Boş bırakılırsa genel videodur)
     university = models.ForeignKey(

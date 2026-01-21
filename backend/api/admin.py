@@ -6,8 +6,10 @@ from .models import (
     StudentHouse, HouseImage, FavoriteStudentHouse, 
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
     UniversityStats, DepartmentStats, Lead, 
-    StudentHouseConnection, Promotion, Review, CampusReel 
+    StudentHouseConnection, Promotion, Review, CampusReel,
 )
+
+# --- 1. ÖNCE CAMPUS REEL (GARANTİ OLSUN DİYE EN BAŞTA) ---
 
 class CampusReelAdmin(admin.ModelAdmin):
     list_display = ('title', 'university', 'show_on_homepage', 'created_at')
@@ -24,8 +26,11 @@ class CampusReelAdmin(admin.ModelAdmin):
         'show_on_homepage'
     )
 
+# Manuel Register (En garanti yöntem)
 admin.site.register(CampusReel, CampusReelAdmin)
-# --- 1. YARDIMCI (INLINE) MODELLER ---
+
+
+# --- 2. YARDIMCI (INLINE) MODELLER ---
 
 class UniversityImageInline(admin.TabularInline):
     model = UniversityImage
@@ -76,9 +81,7 @@ class HouseImageInline(admin.TabularInline):
     verbose_name_plural = "Ev Galerisi"
 
 
-# --- 2. ANA ADMIN MODELLERİ ---
-
-# --- YENİ EKLENEN REELS ADMIN (Decorator SİLİNDİ, aşağıya manuel eklendi) ---
+# --- 3. DİĞER ANA ADMIN MODELLERİ ---
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
@@ -140,3 +143,73 @@ class DormitoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'city', 'dorm_type', 'price', 'is_promoted')
     list_editable = ('is_promoted',)
     list_filter = ('is_promoted', 'city', 'dorm_type')
+    search_fields = ('name', 'district')
+    prepopulated_fields = {'slug': ('name',)}
+    inlines = [DormitoryImageInline]
+    filter_horizontal = ('features',)
+
+@admin.register(StudentHouse)
+class StudentHouseAdmin(admin.ModelAdmin):
+    list_display = ('title', 'city', 'district', 'price', 'is_promoted', 'created_at')
+    list_editable = ('is_promoted',)
+    list_filter = ('is_promoted', 'city', 'room_count', 'is_furnished')
+    search_fields = ('title', 'description', 'district') 
+    prepopulated_fields = {'slug': ('title',)}
+    inlines = [HouseImageInline] 
+    filter_horizontal = ('features',)
+    
+    fields = (
+        'title', 'slug', 'price', 'is_promoted', 'cover_image',
+        'city', 'district',
+        'room_count', 'square_meters', 'is_furnished', 'features',
+        'description', 'contact_phone'
+    )
+
+@admin.register(Scholarship)
+class ScholarshipAdmin(admin.ModelAdmin):
+    list_display = ('title', 'provider', 'amount', 'deadline', 'is_active')
+    list_filter = ('is_active', 'category')
+    search_fields = ('title', 'provider')
+    prepopulated_fields = {'slug': ('title',)}
+
+@admin.register(News)
+class NewsAdmin(admin.ModelAdmin):
+    list_per_page = 50 
+    list_display = ('title', 'category', 'is_published', 'published_at')
+    list_editable = ('is_published',) 
+    list_filter = ('is_published', 'category', 'is_breaking')
+    search_fields = ('title', 'content')
+    prepopulated_fields = {'slug': ('title',)}
+    
+    fields = (
+        ('title', 'slug'),          
+        ('category', 'author'),     
+        'cover_image',
+        'summary',                  
+        'content',                  
+        ('is_published', 'is_breaking', 'is_featured') 
+    )
+
+@admin.register(Promotion)
+class PromotionAdmin(admin.ModelAdmin):
+    list_display = ('university', 'title', 'is_active')
+    search_fields = ('university__name', 'title')
+    list_filter = ('is_active',)
+
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = ('name', 'lead_type', 'university', 'created_at', 'is_read')
+    list_filter = ('lead_type', 'is_read', 'created_at')
+    readonly_fields = ('created_at', 'ip_address')
+
+# --- SADECE OKUNABİLİR MODELLER ---
+
+@admin.register(UniversityStats)
+class UniversityStatsAdmin(admin.ModelAdmin):
+    list_display = ('university', 'date', 'page_views')
+    readonly_fields = ('university', 'date', 'page_views', 'search_appearances', 'website_clicks', 'phone_clicks')
+
+@admin.register(DepartmentStats)
+class DepartmentStatsAdmin(admin.ModelAdmin):
+    list_display = ('department', 'date', 'page_views')
+    readonly_fields = ('department', 'date', 'page_views')

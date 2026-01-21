@@ -199,15 +199,16 @@ JAZZMIN_SETTINGS = {
         "api.Department": "fas fa-graduation-cap",
         "api.Dormitory": "fas fa-bed",
         "api.News": "fas fa-newspaper",
+        "api.CampusReel": "fas fa-video",
     },
     
     # --- SIRALAMA AYARLARI ---
-    # CampusReel buradan kaldırıldı (Otomatik görünmesi için)
     "order_with_respect_to": [
         "api.University", 
         "api.Department", 
         "api.Dormitory", 
-        "api.News"
+        "api.News",
+        "api.CampusReel"
     ],
 }
 
