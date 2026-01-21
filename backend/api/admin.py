@@ -65,6 +65,7 @@ class HouseImageInline(admin.TabularInline):
 # --- YENİ EKLENEN REELS ADMIN ---
 @admin.register(CampusReel)
 class CampusReelAdmin(admin.ModelAdmin):
+    # v4.5 ZORUNLU GUNCELLEME TETIKLEYICISI
     list_display = ('title', 'university', 'show_on_homepage', 'created_at')
     list_filter = ('show_on_homepage', 'university')
     search_fields = ('title', 'university__name')
