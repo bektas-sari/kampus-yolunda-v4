@@ -470,7 +470,7 @@ class CampusReel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Eklenme Tarihi")
 
     class Meta:
-        verbose_name = "Kampüs Reels / Video"
+        verbose_name = "Kampüs Reels"
         verbose_name_plural = "Kampüs Reels Videoları"
         ordering = ['-created_at']
 

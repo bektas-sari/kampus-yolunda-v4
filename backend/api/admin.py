@@ -9,6 +9,23 @@ from .models import (
     StudentHouseConnection, Promotion, Review, CampusReel 
 )
 
+
+class CampusReelAdmin(admin.ModelAdmin):
+    list_display = ('title', 'university', 'show_on_homepage', 'created_at')
+    list_filter = ('show_on_homepage', 'university')
+    search_fields = ('title', 'university__name')
+    autocomplete_fields = ['university']
+    list_editable = ('show_on_homepage',)
+    
+    # Özel form görünümü
+    fields = (
+        'title', 
+        'university', 
+        'embed_code', 
+        'show_on_homepage'
+    )
+    
+admin.site.register(CampusReel, CampusReelAdmin)
 # --- 1. YARDIMCI (INLINE) MODELLER ---
 
 class UniversityImageInline(admin.TabularInline):
@@ -63,20 +80,6 @@ class HouseImageInline(admin.TabularInline):
 # --- 2. ANA ADMIN MODELLERİ ---
 
 # --- YENİ EKLENEN REELS ADMIN (Decorator SİLİNDİ, aşağıya manuel eklendi) ---
-class CampusReelAdmin(admin.ModelAdmin):
-    list_display = ('title', 'university', 'show_on_homepage', 'created_at')
-    list_filter = ('show_on_homepage', 'university')
-    search_fields = ('title', 'university__name')
-    autocomplete_fields = ['university']
-    list_editable = ('show_on_homepage',)
-    
-    # Özel form görünümü
-    fields = (
-        'title', 
-        'university', 
-        'embed_code', 
-        'show_on_homepage'
-    )
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
