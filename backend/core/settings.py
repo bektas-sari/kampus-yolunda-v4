@@ -189,7 +189,7 @@ JAZZMIN_SETTINGS = {
     "site_brand": "Yönetim Paneli",
     "welcome_sign": "Kampüs Yolunda Yönetim Paneline Hoşgeldiniz",
     "copyright": "Kognitect Teknoloji A.Ş.",
-    "search_model": ["api.University", "api.Department"],
+    "search_model": ["api.University", "api.Department", "api.CampusReel"], # <-- ARAMAYA DA EKLEYELİM
     "topmenu_links": [
         {"name": "Siteyi Görüntüle", "url": "https://kampusyolunda.com", "new_window": True},
         {"model": "auth.User"},
@@ -197,6 +197,8 @@ JAZZMIN_SETTINGS = {
     ],
     "show_sidebar": True,
     "navigation_expanded": True,
+    
+    # --- İKON AYARLARI (BURAYA EKLE) ---
     "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
@@ -204,10 +206,21 @@ JAZZMIN_SETTINGS = {
         "api.Department": "fas fa-graduation-cap",
         "api.Dormitory": "fas fa-bed",
         "api.News": "fas fa-newspaper",
+        
+        # YENİ EKLENECEK SATIR:
+        "api.CampusReel": "fas fa-play-circle", 
     },
-    "order_with_respect_to": ["api.University", "api.Department", "api.Dormitory", "api.News"],
+    
+    # --- SIRALAMA AYARLARI (BURAYA EKLE) ---
+    # Bu liste menüdeki sırayı belirler. Reels'i Haberler'in yanına koyabilirsin.
+    "order_with_respect_to": [
+        "api.University", 
+        "api.Department", 
+        "api.Dormitory", 
+        "api.CampusReel", # <-- BURAYA EKLE
+        "api.News"
+    ],
 }
-
 JAZZMIN_UI_TWEAKS = {
     "theme": "flatly",
     "dark_mode_theme": "darkly",
