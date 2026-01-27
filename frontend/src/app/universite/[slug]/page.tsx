@@ -15,7 +15,7 @@ import LeadModal from "@/components/LeadModal";
 import ReviewModal from "@/components/ReviewModal";
 
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kampus-backend-4wes.onrender.com/';
 
 // --- TİP TANIMLAMALARI ---
 interface Feature {

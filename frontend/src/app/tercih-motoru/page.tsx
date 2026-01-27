@@ -65,7 +65,7 @@ export default function TercihRobotu() {
         const deptFilter = keywordInput ? keywordInput.split(',').map(k => k.trim()).filter(k => k.length > 0) : [];
 
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/tercih-motoru/', {
+            const response = await fetch('https://kampus-backend-4wes.onrender.com/api/tercih-motoru/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

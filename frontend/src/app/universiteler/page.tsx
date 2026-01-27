@@ -8,7 +8,7 @@ import { MapPin, Search, Filter, Loader2, GraduationCap, Users, Crown, Sparkles 
 import axios from "axios";
 import FilterSidebar, { FilterConfig } from "@/components/FilterSidebar";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kampus-backend-4wes.onrender.com/';
 
 interface University {
   id: number;
