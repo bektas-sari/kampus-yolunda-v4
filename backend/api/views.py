@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.contenttypes.models import ContentType
+from rest_framework.decorators import action
+from rest_framework.views import APIView
 
 # --- MODELLER ---
 from .models import (
@@ -30,7 +32,8 @@ from .serializers import (
     FeatureSerializer,
     ReviewSerializer, ReviewCreateSerializer,
     FavoriteUniversitySerializer, FavoriteDormitorySerializer, FavoriteStudentHouseSerializer,
-    CampusReelSerializer
+    CampusReelSerializer,
+    PreferenceRequestSerializer, ProgramSuggestionSerializer
 )
 
 # =============================================================================
@@ -73,9 +76,7 @@ class DormitoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
 class StudentHouseViewSet(viewsets.ReadOnlyModelViewSet):
-    # --- DÜZELTME BURADA: Router için queryset zorunludur ---
     queryset = StudentHouse.objects.all() 
-    # --------------------------------------------------------
     serializer_class = StudentHouseSerializer
     lookup_field = 'slug'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -84,17 +85,13 @@ class StudentHouseViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        # Override edilmiş queryset
         queryset = StudentHouse.objects.all().order_by('-is_promoted', '-created_at')
-        
         min_price = self.request.query_params.get('min_price')
         max_price = self.request.query_params.get('max_price')
-        
         if min_price:
             queryset = queryset.filter(price__gte=min_price)
         if max_price:
             queryset = queryset.filter(price__lte=max_price)
-            
         return queryset
 
 class ScholarshipViewSet(viewsets.ReadOnlyModelViewSet):
@@ -123,7 +120,6 @@ class CampusReelViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CampusReel.objects.all().order_by('-created_at')
     serializer_class = CampusReelSerializer
     permission_classes = [AllowAny]
-    
     def get_queryset(self):
         queryset = super().get_queryset()
         homepage = self.request.query_params.get('homepage')
@@ -135,7 +131,6 @@ class LeadViewSet(viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
     permission_classes = [AllowAny] 
-
     def get_permissions(self):
         if self.action == 'create':
             return [AllowAny()]
@@ -151,7 +146,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             model_type = serializer.validated_data.pop('model_type')
             object_id = serializer.validated_data.pop('object_id')
-            
             try:
                 ct = None
                 if model_type == 'university':
@@ -160,7 +154,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
                     ct = ContentType.objects.get(app_label='api', model='dormitory')
                 elif model_type == 'venue':
                     ct = ContentType.objects.get(app_label='api', model='campusvenue')
-                
                 if not ct:
                     return Response({"error": "Geçersiz model tipi"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -174,12 +167,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
                     user=request.user if request.user.is_authenticated else None
                 )
                 return Response({"message": "Yorumunuz başarıyla yayınlandı."}, status=status.HTTP_201_CREATED)
-
             except Exception as e:
                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 # =============================================================================
 # 2. ÖZEL VIEW'LAR (Router dışı, manuel işlemler)
@@ -249,13 +239,11 @@ class FavoriteDormitoryListView(generics.ListAPIView):
 
 class TrackActivityView(views.APIView):
     permission_classes = [AllowAny]
-
     def post(self, request):
         action_type = request.data.get('type')
         slug = request.data.get('slug')
         obj_id = request.data.get('id')
         today = timezone.now().date()
-
         try:
             if action_type in ['university_view', 'website_click', 'phone_click']:
                 if slug:
@@ -267,7 +255,6 @@ class TrackActivityView(views.APIView):
                         elif action_type == 'phone_click': stats.phone_clicks = F('phone_clicks') + 1
                         stats.save()
                         return Response({"status": "tracked"}, status=200)
-
             elif action_type == 'dept_view':
                 if obj_id:
                     dept = Department.objects.filter(id=obj_id).first()
@@ -276,11 +263,156 @@ class TrackActivityView(views.APIView):
                         stats.page_views = F('page_views') + 1
                         stats.save()
                         return Response({"status": "tracked"}, status=200)
-
-            elif action_type in ['house_view', 'house_contact_click']:
-                return Response({"status": "tracked house action"}, status=200)
-
         except Exception as e:
             return Response({"status": "error", "detail": str(e)}, status=400)
-
         return Response({"status": "invalid_action"}, status=200)
+
+class TercihMotoruView(views.APIView):
+    """
+    Sınav sonucuna göre stratejik tercih yelpazesi sunan analiz motoru.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        siralama = request.query_params.get('siralama')
+        puan_turu = request.query_params.get('puan_turu')
+
+        if not siralama or not puan_turu:
+            return Response({"error": "Sıralama ve puan türü gereklidir."}, status=400)
+
+        try:
+            siralama_int = int(siralama)
+        except ValueError:
+            return Response({"error": "Sıralama geçerli bir sayı olmalıdır."}, status=400)
+        
+        # Yelpaze: %30 yukarı (Hayal) ve %50 aşağı (Güvenli)
+        min_rank = siralama_int * 0.7
+        max_rank = siralama_int * 1.5
+
+        queryset = Department.objects.filter(
+            score_type=puan_turu,
+            ranking__range=(min_rank, max_rank)
+        ).select_related('university').order_by('ranking')
+
+        serializer = DepartmentSerializer(queryset, many=True)
+        
+        categorized_data = []
+        for item in serializer.data:
+            rank = item.get('ranking')
+            if rank:
+                if rank < siralama_int * 0.9:
+                    category = "HAYAL"
+                elif rank <= siralama_int * 1.15:
+                    category = "HEDEF"
+                else:
+                    category = "GÜVENLİ"
+                item['category'] = category
+                categorized_data.append(item)
+
+
+class PreferenceEngineView(APIView):
+    """
+    Gelişmiş Tercih Motoru (Preference Engine)
+    Öğrenci sıralamasına göre Garanti, İdeal ve Sürpriz programları kategorize eder.
+    Post Request Bekler:
+    {
+        "student_ranking": 50000,
+        "score_type": "SAY",
+        "city_filter": ["ISTANBUL", "ANKARA"], (Opsiyonel)
+        "department_filter": ["Bilgisayar", "Yazılım"] (Opsiyonel)
+    }
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PreferenceRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        ranking = data['student_ranking']
+        score_type = data['score_type']
+        cities = data.get('city_filter', [])
+        dept_keywords = data.get('department_filter', [])
+
+        # 1. Geniş Kapsamlı Filtreleme (Veritabanı Seviyesi)
+        # Algoritma Limitleri:
+        # Surprise (Sürpriz): %50 - %80 (Örn: 50k ise -> 25k - 40k arası)
+        # Ideal (İdeal): %80 - %125 (Örn: 50k ise -> 40k - 62.5k arası)
+        # Safe (Garanti): %125 - %200 (Örn: 50k ise -> 62.5k - 100k arası)
+        
+        # DB'den çekerken en geniş aralığı (0.5x ile 2.0x arası) alıyoruz.
+        min_limit = int(ranking * 0.50)
+        max_limit = int(ranking * 2.00)
+
+        queryset = Department.objects.filter(
+            score_type=score_type,
+            ranking__range=(min_limit, max_limit)
+        ).select_related('university').order_by('ranking')
+
+        # Şehir Filtresi
+        if cities:
+            queryset = queryset.filter(university__city__in=cities)
+
+        # Bölüm Adı Filtresi (OR Mantığı: "Bilgisayar" VEYA "Yazılım")
+        if dept_keywords:
+            query = Q()
+            for keyword in dept_keywords:
+                query |= Q(name__icontains=keyword)
+            queryset = queryset.filter(query)
+
+        # 2. Python Seviyesinde Kategorizasyon
+        # Veriyi çekip bellekte ayırıyoruz (Serialization maliyetini düşürmek için önce ayırabiliriz, 
+        # ama serializer many=True daha pratik olabilir. Performans kriterine göre optimize edilebilir.)
+        
+        # Not: Queryset henüz execute edilmedi.
+        
+        safe_choices = []
+        ideal_choices = []
+        surprise_choices = []
+
+        # Sınır Değerleri
+        surprise_limit_top = int(ranking * 0.50)
+        surprise_limit_bottom = int(ranking * 0.80)
+        
+        ideal_limit_top = int(ranking * 0.80) # (Burası çakışabilir, >= logic ile çözeriz)
+        ideal_limit_bottom = int(ranking * 1.25)
+        
+        safe_limit_top = int(ranking * 1.25)
+        safe_limit_bottom = int(ranking * 2.00)
+
+        # Iterate edip ayıralım
+        # Serializer'ı manuel list üzerinde kullanacağız
+        
+        all_departments = list(queryset) # DB Hit
+
+        for dept in all_departments:
+            r = dept.ranking
+            if not r: continue
+            
+            # Mantık: 
+            # Sürpriz: 0.5 * Rank <= r < 0.8 * Rank
+            # İdeal:   0.8 * Rank <= r < 1.25 * Rank
+            # Garanti: 1.25 * Rank <= r <= 2.0 * Rank
+            
+            if surprise_limit_top <= r < surprise_limit_bottom:
+                surprise_choices.append(dept)
+            elif ideal_limit_top <= r < ideal_limit_bottom:
+                ideal_choices.append(dept)
+            elif safe_limit_top <= r <= safe_limit_bottom:
+                safe_choices.append(dept)
+
+        # 3. Serialize ve Response Oluşturma
+        return Response({
+            "surprise_choices": ProgramSuggestionSerializer(surprise_choices, many=True).data,
+            "ideal_choices": ProgramSuggestionSerializer(ideal_choices, many=True).data,
+            "safe_choices": ProgramSuggestionSerializer(safe_choices, many=True).data,
+            "meta": {
+                "student_ranking": ranking,
+                "counts": {
+                    "surprise": len(surprise_choices),
+                    "ideal": len(ideal_choices),
+                    "safe": len(safe_choices)
+                }
+            }
+        })

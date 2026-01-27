@@ -324,3 +324,38 @@ class CampusReelSerializer(serializers.ModelSerializer):
     class Meta:
         model = CampusReel
         fields = ['id', 'title', 'embed_code', 'university_name', 'university_slug', 'show_on_homepage']
+
+# --- TERCİH MOTORU SERIALIZERS ---
+
+class PreferenceRequestSerializer(serializers.Serializer):
+    student_ranking = serializers.IntegerField(min_value=1, help_text="Öğrencinin Başarı Sıralaması (Örn: 50000)")
+    score_type = serializers.ChoiceField(choices=Department.SCORE_TYPES, help_text="Puan Türü (SAY, EA, SOZ, DIL)")
+    city_filter = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=True, 
+        help_text="Tercih edilen şehirlerin listesi"
+    )
+    department_filter = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=True,
+        help_text="Bölüm anahtar kelimeleri (Örn: 'Bilgisayar', 'Tıp')"
+    )
+
+class ProgramSuggestionSerializer(serializers.ModelSerializer):
+    university_name = serializers.ReadOnlyField(source='university.name')
+    university_slug = serializers.ReadOnlyField(source='university.slug')
+    university_city = serializers.ReadOnlyField(source='university.city')
+    university_type = serializers.ReadOnlyField(source='university.uni_type')
+    university_logo = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Department
+        fields = [
+            'id', 'name', 'program_code', 'faculty', 'language', 'education_type',
+            'score_type', 'duration', 'quota', 'base_score', 'ranking',
+            'university_name', 'university_slug', 'university_city', 
+            'university_type', 'university_logo'
+        ]
+
+    def get_university_logo(self, obj):
+        if obj.university.logo:
+            return obj.university.logo.url
+        return None

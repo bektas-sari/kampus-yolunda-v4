@@ -3,9 +3,6 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 # --- ROUTER KURULUMU ---
-# Router, viewset'leri otomatik olarak URL'lere bağlar.
-# Örn: /api/universities/ -> Listeleme
-# Örn: /api/universities/odtu/ -> Detay gösterme
 router = DefaultRouter()
 
 # 1. ANA MODELLER
@@ -21,7 +18,7 @@ router.register(r'student-houses', views.StudentHouseViewSet)
 router.register(r'news', views.NewsViewSet)
 router.register(r'scholarships', views.ScholarshipViewSet)
 router.register(r'promotions', views.PromotionViewSet)
-router.register(r'reels', views.CampusReelViewSet) # Yeni eklediğimiz Reels sistemi
+router.register(r'reels', views.CampusReelViewSet)
 
 # 4. GENEL VE ETKİLEŞİM
 router.register(r'features', views.FeatureViewSet)
@@ -30,17 +27,14 @@ router.register(r'reviews', views.ReviewViewSet)
 
 # --- URL PATTERNS ---
 urlpatterns = [
-    # Router tarafından oluşturulan tüm URL'leri buraya dahil ediyoruz
+    # Router URL'leri
     path('', include(router.urls)),
 
-    # --- ROUTER DIŞI ÖZEL URL'LER (Manuel Tanımlamalar) ---
-    # Router standart CRUD işlemleri içindir. Özel işlemler (Login, Register, vb.) burada kalır.
-    
     # Kullanıcı & Auth
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/me/', views.ManageUserView.as_view(), name='me'),
 
-    # Favoriler (Toggle ve Liste)
+    # Favoriler
     path('favorites/houses/', views.FavoriteListView.as_view(), name='fav-houses'),
     path('favorites/houses/toggle/', views.FavoriteToggleView.as_view(), name='fav-houses-toggle'),
     
@@ -52,4 +46,7 @@ urlpatterns = [
 
     # Analitik
     path('track-activity/', views.TrackActivityView.as_view(), name='track-activity'),
+
+    # Tercih Motoru Özel Endpoint
+    path('tercih-motoru/', views.PreferenceEngineView.as_view(), name='tercih_motoru'),
 ]
