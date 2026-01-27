@@ -7,11 +7,11 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center text-center p-6 relative overflow-hidden">
 
-      {/* Arka Plan Efekti - Algı Yönetimi: Derinlik hissi */}
+      {/* Arka Plan Efekti */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] -z-10" />
       <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-indigo-600/10 rounded-full blur-[100px] -z-10" />
 
-      {/* Hero Başlık */}
+      {/* Başlık Alanı */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
         <span className="inline-block py-1 px-3 rounded-full bg-blue-900/30 border border-blue-800/50 text-blue-400 text-xs font-bold mb-6 tracking-wide">
           YAPAY ZEKA DESTEKLİ KARİYER DANIŞMANI
@@ -26,7 +26,7 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Aksiyon Butonları (Call to Action) */}
+      {/* Butonlar */}
       <div className="flex flex-col md:flex-row gap-6 w-full max-w-lg mx-auto animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
         <Link
           href="/tercih-motoru"
@@ -47,9 +47,8 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* Footer İmzası */}
       <div className="mt-24 text-xs text-slate-600 font-mono uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
-        Designed by Bektaş Sarı & Kognitect AI
+        Designed by @Kognitect AI
       </div>
     </div>
   );
