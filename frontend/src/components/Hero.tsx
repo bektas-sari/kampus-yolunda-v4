@@ -87,9 +87,9 @@ export default function Hero() {
             <svg className="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
           </Link>
 
-          {/* DÜZELTME: Link adresi /tercih-robotu olarak güncellendi */}
+          {/* DÜZELTME: Link adresi /tercih-motoru olarak güncellendi */}
           <Link
-            href="/tercih-robotu"
+            href="/tercih-motoru"
             className="inline-flex h-14 items-center justify-center rounded-full border border-white/20 bg-white/5 px-8 text-lg font-medium text-white transition-all hover:bg-white/10 hover:border-white/40 backdrop-blur-sm"
           >
             Puanımı Hesapla
