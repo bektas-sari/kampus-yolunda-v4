@@ -3,7 +3,6 @@ import NewsTicker from "@/components/NewsTicker";
 import UniversityShowcase from "@/components/UniversityShowcase";
 import DormitoryShowcase from "@/components/DormitoryShowcase";
 import SocialEmbeds from "@/components/SocialEmbeds"; // <--- 1. Import Et
-import ResultCard from "@/components/tercih/ResultCard";
 
 export default function Home() {
   return (
