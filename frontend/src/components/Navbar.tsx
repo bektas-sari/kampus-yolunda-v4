@@ -76,7 +76,7 @@ export default function Navbar() {
               <Link href="/ogrenci-evleri" className="text-[15px] font-medium text-gray-300 hover:text-white transition-colors">
                 Öğrenci Evleri
               </Link>
-              <Link href="/tercih-robotu" className="text-[15px] font-medium text-gray-300 hover:text-white transition-colors">
+              <Link href="/tercih-motoru" className="text-[15px] font-medium text-gray-300 hover:text-white transition-colors">
                 Tercih Motoru
               </Link>
               <Link href="/burslar" className="flex items-center gap-2 text-[15px] font-medium text-gray-300 hover:text-white transition-colors">
