@@ -11,7 +11,7 @@ router.register(r'departments', views.DepartmentViewSet)
 router.register(r'venues', views.CampusVenueViewSet)
 
 # 2. KONAKLAMA (Yurt & Ev)
-router.register(r'dormitories', views.DormitoryViewSet)
+router.register(r'dormitories', views.DormitoryViewSet) 
 router.register(r'student-houses', views.StudentHouseViewSet)
 
 # 3. İÇERİK VE MEDYA
@@ -50,3 +50,5 @@ urlpatterns = [
     # Tercih Motoru Özel Endpoint
     path('tercih-motoru/', views.TercihMotoruView.as_view(), name='tercih_motoru'),
 ]
+
+# Son guncelleme
