@@ -372,14 +372,28 @@ class TercihMotoruView(views.APIView):
             for city in city_filter:
                 term = str(city).strip()
                 if not term: continue
-                # Türkçe karakter varyasyonları
-                replacements = {'İ': 'I', 'i': 'I', 'ı': 'I', 'I': 'I', 'ş': 'S', 'Ş': 'S', 'ç': 'C', 'Ç': 'C', 'ğ': 'G', 'Ğ': 'G', 'ü': 'U', 'Ü': 'U', 'ö': 'O', 'Ö': 'O'}
-                normalized_term = term.upper()
-                for tr, en in replacements.items():
-                    normalized_term = normalized_term.replace(tr, en)
                 
+                # 1. Ham arama
                 city_query |= Q(university__city__icontains=term)
-                city_query |= Q(university__city__icontains=normalized_term)
+                
+                # 2. ASCII (English) Upper: "izmir" -> "IZMIR"
+                term_ascii = term.replace("i", "i").upper() # Standard upper
+                city_query |= Q(university__city__icontains=term_ascii)
+
+                # 3. Turkish Upper: "izmir" -> "İZMİR"
+                # "i" -> "İ" ve "ı" -> "I" dönüşümlerini manuel yapıyoruz
+                term_tr = term.replace("i", "İ").replace("ı", "I").upper()
+                city_query |= Q(university__city__icontains=term_tr)
+                
+                # 4. Alternatifler/Yedekler
+                # Bazı DB'lerde IZMIR, bazılarında İZMİR, bazılarında Izmir olabilir.
+                # Hepsini kapsamak için varyasyonları ekliyoruz.
+                replacements = {'İ': 'I', 'ı': 'I', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g', 'Ü': 'U', 'ü': 'u', 'Ö': 'O', 'ö': 'o', 'Ç': 'C', 'ç': 'c'}
+                term_normalized = term
+                for tr, en in replacements.items():
+                    term_normalized = term_normalized.replace(tr, en)
+                city_query |= Q(university__city__icontains=term_normalized)
+
             programs = programs.filter(city_query)
 
         if dept_filter and len(dept_filter) > 0:
@@ -388,8 +402,10 @@ class TercihMotoruView(views.APIView):
                 d_term = str(dept).strip()
                 if not d_term: continue
                 dept_query |= Q(name__icontains=d_term)
+                # Bölüm araması için de Türkçe 'i' -> 'İ' desteği
                 if 'i' in d_term:
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ'))
+                    dept_query |= Q(name__icontains=d_term.replace('i', 'İ').upper())
             programs = programs.filter(dept_query)
 
         # --- 3. KATEGORİZASYON (RANK 1 MANTIĞI) ---
@@ -405,14 +421,16 @@ class TercihMotoruView(views.APIView):
             
             # Segment A (Derece) için özel dağılım:
             if ranking < 5000:
-                # 1. olan öğrenci için "Sürpriz" (Yüksek Hedef) olamaz. Çünkü 1'den iyisi yok.
-                # Bu yüzden en iyi bölümleri "İdeal" ve "Güvenli"ye dağıtıyoruz.
+                # Rank 1-5000 arası öğrenciler için "İdeal" kavramı esnetilmeli.
+                # Sadece (rank * 1.5) dersek, Rank 1 için 1.5 olur ve hiçbir şey İdeal'e girmez.
+                # Bu yüzden: En azından ilk 3000-5000'deki yerler "İdeal" sayılmalı.
                 
-                if prog_rank <= ranking * 1.5: 
-                    # Kendi sıralamasına yakın olanlar (Örn: Rank 1 ise Rank 1-2-3-10...)
+                # Dinamik eşik: Kendi sıralamasının 1.5 katı VEYA sabit 3000 sıralaması (hangisi büyükse)
+                ideal_threshold = max(ranking * 1.5, 3000)
+                
+                if prog_rank <= ideal_threshold: 
                     ideal.append(item)
                 else:
-                    # Biraz daha geridekiler
                     safe.append(item)
             else:
                 # Standart Kullanıcılar İçin
@@ -423,9 +441,9 @@ class TercihMotoruView(views.APIView):
                 else: # Arası (%5 iyi ile %15 kötü arası)
                     ideal.append(item)
 
-        # En iyi 20 sonucu döndür
+        # En iyi sonuçları döndür (Limit artırıldı)
         return Response({
-            "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:20],
-            "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:20],
-            "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:20]
+            "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:50],
+            "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:50],
+            "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:50]
         })
