@@ -48,5 +48,5 @@ urlpatterns = [
     path('track-activity/', views.TrackActivityView.as_view(), name='track-activity'),
 
     # Tercih Motoru Özel Endpoint
-    path('tercih-motoru/', views.PreferenceEngineView.as_view(), name='tercih_motoru'),
+    path('tercih-motoru/', views.TercihMotoruView.as_view(), name='tercih_motoru'),
 ]
