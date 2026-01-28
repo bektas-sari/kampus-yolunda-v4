@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, MapPin, GraduationCap, ChevronRight, TrendingUp, Anchor, AlertCircle, Loader2 } from "lucide-react";
+import { Search, MapPin, ChevronRight, TrendingUp, Anchor, AlertCircle, Loader2 } from "lucide-react";
 
-// Backend'den gelen verinin yeni yapısı (Nested Object)
+// --- TİP TANIMLAMALARI ---
 interface University {
     name: string;
     slug: string;
@@ -23,7 +23,7 @@ interface Program {
     ranking: number | null;
     points: number | null;
     education_type: string;
-    university: University; // <-- Artık detaylı obje
+    university: University;
 }
 
 interface AnalysisResult {
@@ -33,7 +33,6 @@ interface AnalysisResult {
 }
 
 export default function TercihMotoruPage() {
-    const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<AnalysisResult | null>(null);
 
@@ -43,12 +42,27 @@ export default function TercihMotoruPage() {
     const [cityFilter, setCityFilter] = useState("");
     const [deptFilter, setDeptFilter] = useState("");
 
+    // --- İHTİMAL HESAPLAMA MATEMATİĞİ ---
+    const calculateProbability = (studentRank: number, deptRank: number | null) => {
+        if (!deptRank || !studentRank) return 0;
+
+        // Basit bir olasılık algoritması
+        const ratio = deptRank / studentRank;
+        let chance = 0;
+
+        if (ratio < 0.7) chance = 10 + (ratio * 15); // Çok zor (%10-%20)
+        else if (ratio < 1.0) chance = 20 + ((ratio - 0.7) * 100); // Riskli (%20-%50)
+        else if (ratio < 1.4) chance = 50 + ((ratio - 1.0) * 80); // İdeal (%50-%80)
+        else chance = 82 + ((ratio - 1.4) * 30); // Garanti (%82-%99)
+
+        return Math.min(Math.round(chance), 99);
+    };
+
     const handleAnalyze = async () => {
         if (!ranking) return;
         setLoading(true);
 
         try {
-            // API URL (Env veya Fallback)
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kampus-yolunda-api.onrender.com';
 
             const res = await fetch(`${API_URL}/api/tercih-motoru/`, {
@@ -65,7 +79,6 @@ export default function TercihMotoruPage() {
             if (!res.ok) throw new Error("Analiz hatası");
             const data = await res.json();
             setResults(data);
-            setStep(2);
         } catch (error) {
             console.error(error);
             alert("Bir hata oluştu. Lütfen tekrar deneyin.");
@@ -74,56 +87,54 @@ export default function TercihMotoruPage() {
         }
     };
 
-    // Kart Bileşeni (Yeni Veri Yapısına Uygun)
+    // --- KART BİLEŞENİ ---
     const ProgramCard = ({ program, type }: { program: Program, type: 'surprise' | 'ideal' | 'safe' }) => {
-        const uniName = program.university?.name || "Üniversite Bilgisi Yok";
+        const uniName = program.university?.name || "Üniversite";
         const uniCity = program.university?.city || "";
         const uniSlug = program.university?.slug || "#";
 
-        // Renk ve ikon seçimi
+        // İhtimal Hesapla
+        const probability = calculateProbability(parseInt(ranking), program.ranking);
+
+        // Stil Ayarları
         const styles = {
-            surprise: { border: "border-orange-500/30", bg: "bg-orange-500/10", text: "text-orange-400", label: "Yüksek Hedef", icon: TrendingUp },
-            ideal: { border: "border-blue-500/30", bg: "bg-blue-500/10", text: "text-blue-400", label: "İdeal Tercih", icon: AlertCircle },
-            safe: { border: "border-green-500/30", bg: "bg-green-500/10", text: "text-green-400", label: "Güvenli Liman", icon: Anchor },
+            surprise: { border: "border-orange-500/30", bg: "bg-orange-500/5", text: "text-orange-400", label: "Yüksek Hedef" },
+            ideal: { border: "border-blue-500/30", bg: "bg-blue-500/5", text: "text-blue-400", label: "İdeal Tercih" },
+            safe: { border: "border-green-500/30", bg: "bg-green-500/5", text: "text-green-400", label: "Güvenli Liman" },
         }[type];
 
-        const Icon = styles.icon;
-
         return (
-            <Link href={`/universite/${uniSlug}`} className={`block group relative bg-white/5 border ${styles.border} rounded-2xl p-5 hover:bg-white/10 transition-all hover:-translate-y-1`}>
-                <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-3">
-                        {/* Logo varsa burada gösterilebilir */}
-                        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-xs font-bold text-white/50">
-                            {uniName.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                            <h3 className="text-white font-bold text-sm md:text-base leading-tight">{uniName}</h3>
-                            <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                                <MapPin className="w-3 h-3" />
-                                <span>{uniCity}</span>
-                                {program.education_type && <span className="w-1 h-1 bg-gray-600 rounded-full" />}
-                                <span>{program.education_type}</span>
-                            </div>
+            <Link href={`/universite/${uniSlug}`} className={`block group relative bg-[#0a0a0a] border ${styles.border} rounded-xl p-4 hover:bg-white/5 transition-all mb-3`}>
+                {/* Üst Kısım: Üniversite ve Logo */}
+                <div className="flex items-start gap-3 mb-3">
+                    <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/50 shrink-0">
+                        {uniName.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                        <h3 className="text-white font-bold text-xs md:text-sm leading-tight truncate">{uniName}</h3>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-1">
+                            <MapPin className="w-3 h-3" />
+                            <span>{uniCity}</span>
+                            {program.education_type && <span className="w-1 h-1 bg-gray-700 rounded-full" />}
+                            <span>{program.education_type}</span>
                         </div>
                     </div>
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-current ${styles.text} ${styles.bg}`}>
-                        {styles.label}
-                    </span>
                 </div>
 
-                <h4 className="text-lg font-semibold text-gray-200 mb-4 group-hover:text-white transition-colors">
+                {/* Orta Kısım: Bölüm Adı */}
+                <h4 className="text-sm font-medium text-gray-300 mb-3 group-hover:text-white transition-colors line-clamp-2">
                     {program.name}
                 </h4>
 
-                <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                {/* Alt Kısım: İstatistikler */}
+                <div className="flex items-center justify-between pt-3 border-t border-white/5">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-400">Sıralama:</span>
-                        <span className="text-white font-mono font-bold">
-                            #{program.ranking?.toLocaleString('tr-TR')}
-                        </span>
+                        <span className={`text-xs font-bold ${styles.text}`}>%{probability} İhtimal</span>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                    <div className="flex items-center gap-1 text-gray-400">
+                        <span className="text-[10px]">#{program.ranking?.toLocaleString('tr-TR')}</span>
+                        <ChevronRight className="w-4 h-4" />
+                    </div>
                 </div>
             </Link>
         );
@@ -132,39 +143,37 @@ export default function TercihMotoruPage() {
     return (
         <div className="min-h-screen bg-[#020617] text-white pb-20">
             {/* HEADER */}
-            <div className="pt-32 pb-10 px-4 text-center">
-                <h1 className="text-4xl md:text-5xl font-black mb-4 tracking-tight">
+            <div className="pt-28 pb-8 px-4 text-center">
+                <h1 className="text-3xl md:text-5xl font-black mb-4 tracking-tight">
                     Yapay Zeka <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Tercih Motoru</span>
                 </h1>
-                <p className="text-gray-400 max-w-2xl mx-auto">
-                    Sıralamanı gir, algoritma senin için en stratejik tercih listesini oluştursun.
+                <p className="text-gray-400 max-w-xl mx-auto text-sm md:text-base">
+                    Gerçek veri analiziyle nokta atışı tercihler yap.
                 </p>
             </div>
 
             {/* INPUT ALANI */}
-            <div className="max-w-4xl mx-auto px-4 mb-12">
-                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="max-w-5xl mx-auto px-4 mb-10">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-                        {/* Sıralama */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Sıralaman</label>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Sıralaman</label>
                             <input
                                 type="number"
                                 placeholder="Örn: 50000"
                                 value={ranking}
                                 onChange={(e) => setRanking(e.target.value)}
-                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
                             />
                         </div>
 
-                        {/* Puan Türü */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Puan Türü</label>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Puan Türü</label>
                             <select
                                 value={scoreType}
                                 onChange={(e) => setScoreType(e.target.value)}
-                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                                className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none appearance-none"
                             >
                                 <option value="SAY">SAYISAL (SAY)</option>
                                 <option value="EA">EŞİT AĞIRLIK (EA)</option>
@@ -173,111 +182,114 @@ export default function TercihMotoruPage() {
                             </select>
                         </div>
 
-                        {/* Şehir Filtresi */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Şehir (Opsiyonel)</label>
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    placeholder="İstanbul, Ankara..."
-                                    value={cityFilter}
-                                    onChange={(e) => setCityFilter(e.target.value)}
-                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 pl-10 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
-                                />
-                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                            </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Şehir</label>
+                            <input
+                                type="text"
+                                placeholder="İstanbul..."
+                                value={cityFilter}
+                                onChange={(e) => setCityFilter(e.target.value)}
+                                className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                            />
                         </div>
 
-                        {/* Bölüm Filtresi */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Bölüm (Opsiyonel)</label>
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    placeholder="Bilgisayar, Tıp..."
-                                    value={deptFilter}
-                                    onChange={(e) => setDeptFilter(e.target.value)}
-                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 pl-10 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
-                                />
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                            </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Bölüm</label>
+                            <input
+                                type="text"
+                                placeholder="Bilgisayar..."
+                                value={deptFilter}
+                                onChange={(e) => setDeptFilter(e.target.value)}
+                                className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                            />
                         </div>
                     </div>
 
                     <button
                         onClick={handleAnalyze}
                         disabled={loading || !ranking}
-                        className="w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full mt-4 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <TrendingUp />}
-                        {loading ? "Analiz Yapılıyor..." : "Analizi Başlat"}
+                        {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
+                        {loading ? "Hesaplanıyor..." : "Analizi Başlat"}
                     </button>
                 </div>
             </div>
 
-            {/* SONUÇLAR */}
+            {/* SONUÇLAR (YAN YANA 3 SÜTUN) */}
             {results && (
-                <div className="max-w-7xl mx-auto px-4 space-y-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
+                <div className="max-w-[1400px] mx-auto px-4 animate-in fade-in slide-in-from-bottom-10 duration-700">
 
-                    {/* 1. Yüksek Hedef (Sürpriz) */}
-                    {results.surprise_choices.length > 0 && (
-                        <section>
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="p-2 bg-orange-500/20 rounded-lg text-orange-400">
-                                    <TrendingUp className="w-6 h-6" />
+                    {/* GRID YAPISI: Masaüstünde 3 Sütun, Mobilde Tek Sütun */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+                        {/* 1. SÜTUN: YÜKSEK HEDEFLER */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 pb-2 border-b border-white/10">
+                                <div className="p-1.5 bg-orange-500/20 rounded text-orange-400">
+                                    <TrendingUp className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white">Yüksek Hedefler</h2>
-                                    <p className="text-gray-400 text-sm">Zor ama denemeye değer sürpriz tercihler.</p>
+                                    <h2 className="text-lg font-bold text-white">Yüksek Hedefler</h2>
+                                    <p className="text-gray-500 text-xs">Sürpriz tercihler.</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {results.surprise_choices.map((prog) => (
-                                    <ProgramCard key={prog.id} program={prog} type="surprise" />
-                                ))}
+                            <div className="space-y-3">
+                                {results.surprise_choices.length > 0 ? (
+                                    results.surprise_choices.map((prog) => (
+                                        <ProgramCard key={prog.id} program={prog} type="surprise" />
+                                    ))
+                                ) : (
+                                    <div className="text-gray-600 text-sm italic p-4 text-center">Bu aralıkta sonuç bulunamadı.</div>
+                                )}
                             </div>
-                        </section>
-                    )}
+                        </div>
 
-                    {/* 2. İdeal Tercih */}
-                    {results.ideal_choices.length > 0 && (
-                        <section>
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
-                                    <AlertCircle className="w-6 h-6" />
+                        {/* 2. SÜTUN: İDEAL TERCİHLER */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 pb-2 border-b border-white/10">
+                                <div className="p-1.5 bg-blue-500/20 rounded text-blue-400">
+                                    <AlertCircle className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white">İdeal Tercihler</h2>
-                                    <p className="text-gray-400 text-sm">Sıralamana en uygun, yerleşme ihtimalin yüksek bölümler.</p>
+                                    <h2 className="text-lg font-bold text-white">İdeal Tercihler</h2>
+                                    <p className="text-gray-500 text-xs">En uygun bölümler.</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {results.ideal_choices.map((prog) => (
-                                    <ProgramCard key={prog.id} program={prog} type="ideal" />
-                                ))}
+                            <div className="space-y-3">
+                                {results.ideal_choices.length > 0 ? (
+                                    results.ideal_choices.map((prog) => (
+                                        <ProgramCard key={prog.id} program={prog} type="ideal" />
+                                    ))
+                                ) : (
+                                    <div className="text-gray-600 text-sm italic p-4 text-center">Bu aralıkta sonuç bulunamadı.</div>
+                                )}
                             </div>
-                        </section>
-                    )}
+                        </div>
 
-                    {/* 3. Güvenli Liman */}
-                    {results.safe_choices.length > 0 && (
-                        <section>
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="p-2 bg-green-500/20 rounded-lg text-green-400">
-                                    <Anchor className="w-6 h-6" />
+                        {/* 3. SÜTUN: GÜVENLİ LİMAN */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 pb-2 border-b border-white/10">
+                                <div className="p-1.5 bg-green-500/20 rounded text-green-400">
+                                    <Anchor className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white">Güvenli Liman</h2>
-                                    <p className="text-gray-400 text-sm">Açıkta kalma riskini sıfıra indiren garanti tercihler.</p>
+                                    <h2 className="text-lg font-bold text-white">Güvenli Liman</h2>
+                                    <p className="text-gray-500 text-xs">Garanti tercihler.</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {results.safe_choices.map((prog) => (
-                                    <ProgramCard key={prog.id} program={prog} type="safe" />
-                                ))}
+                            <div className="space-y-3">
+                                {results.safe_choices.length > 0 ? (
+                                    results.safe_choices.map((prog) => (
+                                        <ProgramCard key={prog.id} program={prog} type="safe" />
+                                    ))
+                                ) : (
+                                    <div className="text-gray-600 text-sm italic p-4 text-center">Bu aralıkta sonuç bulunamadı.</div>
+                                )}
                             </div>
-                        </section>
-                    )}
+                        </div>
+
+                    </div>
                 </div>
             )}
         </div>
