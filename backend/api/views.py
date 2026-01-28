@@ -339,20 +339,21 @@ class TercihMotoruView(views.APIView):
         # --- 1. SEGMENTLİ ARALIK BELİRLEME (DERECE ÖĞRENCİSİ DÜZELTMESİ) ---
         
         # Segment A: Derece (1 - 5.000)
-        # BURASI KRİTİK: Rank 1 gelirse (1 * 1.6) yapma. Direkt ilk 20.000'i getir.
+        # DEĞİŞİKLİK: Üst limiti 20k'dan 300k'ya çıkardık. 
+        # Böylece derece öğrencisi, "Güvenli Liman" olarak tüm garantileri görebilecek.
         if ranking < 5000:
             min_limit = 0
-            max_limit = 20000 # Derece yapan öğrenci ilk 20 bindeki her şeyi görsün.
+            max_limit = 300000 # <-- TAVANI KALDIRDIK (Önceki 20000 idi)
         
         # Segment B: Başarılı (5.000 - 50.000)
         elif ranking < 50000:
-            min_limit = int(ranking * 0.70) # %30 daha iyisi
-            max_limit = int(ranking * 1.50) # %50 daha gerisi
+            min_limit = int(ranking * 0.50) # %50 daha iyisini görsün (Sürprizleri kaçırmasın)
+            max_limit = int(ranking * 4.00) # Alt tarafı çok genişlet ki "Garanti"leri görsün
             
         # Segment C: Orta (50.000 - 200.000)
         elif ranking < 200000:
-            min_limit = int(ranking * 0.85)
-            max_limit = int(ranking * 1.60)
+            min_limit = int(ranking * 0.80)
+            max_limit = int(ranking * 2.00)
             
         # Segment D: Alt (200.000+)
         else:
