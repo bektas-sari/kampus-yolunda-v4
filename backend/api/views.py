@@ -320,19 +320,16 @@ class TercihMotoruView(views.APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # 1. Veri Doğrulama ve Alma
         try:
             ranking = int(request.data.get('student_ranking', 0))
             score_type = request.data.get('score_type', 'SAY')
             
-            # Input Handling: String gelirse listeye çevir (Robustness)
-            city_filter = request.data.get('city_filter', [])
-            if isinstance(city_filter, str):
-                city_filter = [city_filter]
-
-            dept_filter = request.data.get('department_filter', [])
-            if isinstance(dept_filter, str):
-                dept_filter = [dept_filter]
+            # Gelen veriyi listeye çevir (Güvenlik)
+            raw_city = request.data.get('city_filter', [])
+            raw_dept = request.data.get('department_filter', [])
+            
+            city_filter = [raw_city] if isinstance(raw_city, str) else raw_city
+            dept_filter = [raw_dept] if isinstance(raw_dept, str) else raw_dept
 
         except (ValueError, TypeError):
             return Response({"error": "Geçersiz veri formatı."}, status=400)
@@ -340,8 +337,7 @@ class TercihMotoruView(views.APIView):
         if ranking == 0:
             return Response({"error": "Sıralama bilgisi gereklidir."}, status=400)
 
-        # 2. Geniş Tarama Aralığı (Query Optimization)
-        # Öğrencinin sıralamasının %20'si (Çok yüksek hedefler) ile %60 fazlası (Garanti) arasını getir
+        # Tarama Aralığı
         min_limit = ranking * 0.20 
         max_limit = ranking * 1.60
 
@@ -350,51 +346,47 @@ class TercihMotoruView(views.APIView):
             ranking__range=(min_limit, max_limit)
         ).select_related('university')
 
-        # 3. AKILLI TÜRKÇE ŞEHİR FİLTRESİ
+        # --- ŞEHİR FİLTRESİ (ASCII NORMALİZASYONU) ---
         if city_filter and len(city_filter) > 0:
             city_query = Q()
             for city in city_filter:
-                term = city.strip()
+                term = str(city).strip()
                 if not term: continue
-
-                # A) Olduğu gibi ara (örn: "Ankara")
+                
+                # Türkçe karakter varyasyonları (Backend uyumluluğu için)
+                replacements = {
+                    'İ': 'I', 'i': 'I', 
+                    'ı': 'I', 'I': 'I',
+                    'ş': 'S', 'Ş': 'S',
+                    'ç': 'C', 'Ç': 'C',
+                    'ğ': 'G', 'Ğ': 'G',
+                    'ü': 'U', 'Ü': 'U',
+                    'ö': 'O', 'Ö': 'O'
+                }
+                
+                normalized_term = term.upper()
+                for tr, en in replacements.items():
+                    normalized_term = normalized_term.replace(tr, en)
+                
+                # Hem normal halini hem normalize edilmiş halini ara
                 city_query |= Q(university__city__icontains=term)
-                
-                # B) Türkçe 'i' -> 'İ' dönüşümü
-                if 'i' in term:
-                    term_tr = term.replace('i', 'İ')
-                    city_query |= Q(university__city__icontains=term_tr)
-                
-                # C) Türkçe 'ı' -> 'I' dönüşümü
-                if 'ı' in term:
-                    term_tr = term.replace('ı', 'I')
-                    city_query |= Q(university__city__icontains=term_tr)
-                
-                # D) Tam büyük harf versiyonu
-                term_upper = term.replace('i', 'İ').replace('ı', 'I').upper()
-                city_query |= Q(university__city__icontains=term_upper)
+                city_query |= Q(university__city__icontains=normalized_term)
 
             programs = programs.filter(city_query)
 
-        # 4. ESNEK BÖLÜM FİLTRESİ (Bölüm adı içinde arama)
+        # --- BÖLÜM FİLTRESİ ---
         if dept_filter and len(dept_filter) > 0:
             dept_query = Q()
             for dept in dept_filter:
-                d_term = dept.strip()
+                d_term = str(dept).strip()
                 if not d_term: continue
-
                 dept_query |= Q(name__icontains=d_term)
-                
-                # Bölüm araması için de Türkçe 'i' ve 'ı' desteği
                 if 'i' in d_term:
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ'))
-                if 'ı' in d_term:
-                    dept_query |= Q(name__icontains=d_term.replace('ı', 'I'))
                     
             programs = programs.filter(dept_query)
 
-        # 5. Kategorize Et (Sürpriz / İdeal / Güvenli)
-        # Veriyi serialize ettikten sonra Python tarafında mantıksal olarak ayırıyoruz.
+        # SIRALAMA VE KATEGORİZE ETME
         serialized_data = DepartmentSerializer(programs, many=True).data
         
         surprise = []
@@ -403,10 +395,8 @@ class TercihMotoruView(views.APIView):
 
         for item in serialized_data:
             prog_rank = item['ranking']
-            if not prog_rank: 
-                continue
+            if not prog_rank: continue
             
-            # Kategorizasyon Mantığı:
             if prog_rank < ranking * 0.90:
                 surprise.append(item)
             elif prog_rank > ranking * 1.25:
@@ -414,7 +404,6 @@ class TercihMotoruView(views.APIView):
             else:
                 ideal.append(item)
 
-        # 6. Sonuçları Döndür
         return Response({
             "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:15],
             "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:15],
