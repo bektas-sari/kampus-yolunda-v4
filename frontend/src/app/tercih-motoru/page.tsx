@@ -64,8 +64,10 @@ export default function TercihRobotu() {
         const cityFilter = cityInput ? cityInput.split(',').map(c => c.trim()).filter(c => c.length > 0) : [];
         const deptFilter = keywordInput ? keywordInput.split(',').map(k => k.trim()).filter(k => k.length > 0) : [];
 
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kampus-backend-4wes.onrender.com';
+
         try {
-            const response = await fetch('https://kampus-backend-4wes.onrender.com/api/tercih-motoru/', {
+            const response = await fetch(`${API_URL}/api/tercih-motoru/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

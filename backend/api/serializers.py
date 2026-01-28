@@ -102,14 +102,29 @@ class CampusVenueSerializer(serializers.ModelSerializer):
         return [x.strip() for x in obj.amenities.split(',') if x.strip()]
 
 # --- BÖLÜM SERIALIZER ---
+
+class SimpleUniversitySerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = University
+        fields = ['name', 'slug', 'city', 'logo', 'logo_url', 'uni_type']
+
+    def get_logo_url(self, obj):
+        if obj.logo: return obj.logo.url
+        return None
+
 class DepartmentSerializer(serializers.ModelSerializer):
+    university = SimpleUniversitySerializer(read_only=True)
+
     class Meta:
         model = Department
         fields = [
             'id', 'program_code', 'name', 'faculty', 
             'language', 'education_type', 'score_type', 'duration',
             'quota', 'school_rank_quota', 'base_score', 'ranking',
-            'special_conditions', 'accreditation'
+            'special_conditions', 'accreditation',
+            'university'
         ]
 
 class PromotionSerializer(serializers.ModelSerializer):

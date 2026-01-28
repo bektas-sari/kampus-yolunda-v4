@@ -324,8 +324,16 @@ class TercihMotoruView(views.APIView):
         try:
             ranking = int(request.data.get('student_ranking', 0))
             score_type = request.data.get('score_type', 'SAY')
-            city_filter = request.data.get('city_filter', []) # Liste: ['istanbul', 'ankara']
-            dept_filter = request.data.get('department_filter', []) # Liste: ['bilgisayar']
+            
+            # Input Handling: String gelirse listeye çevir (Robustness)
+            city_filter = request.data.get('city_filter', [])
+            if isinstance(city_filter, str):
+                city_filter = [city_filter]
+
+            dept_filter = request.data.get('department_filter', [])
+            if isinstance(dept_filter, str):
+                dept_filter = [dept_filter]
+
         except (ValueError, TypeError):
             return Response({"error": "Geçersiz veri formatı."}, status=400)
 
@@ -347,6 +355,8 @@ class TercihMotoruView(views.APIView):
             city_query = Q()
             for city in city_filter:
                 term = city.strip()
+                if not term: continue
+
                 # A) Olduğu gibi ara (örn: "Ankara")
                 city_query |= Q(university__city__icontains=term)
                 
@@ -361,7 +371,7 @@ class TercihMotoruView(views.APIView):
                     city_query |= Q(university__city__icontains=term_tr)
                 
                 # D) Tam büyük harf versiyonu
-                term_upper = term.replace('i', 'İ').upper()
+                term_upper = term.replace('i', 'İ').replace('ı', 'I').upper()
                 city_query |= Q(university__city__icontains=term_upper)
 
             programs = programs.filter(city_query)
@@ -371,11 +381,15 @@ class TercihMotoruView(views.APIView):
             dept_query = Q()
             for dept in dept_filter:
                 d_term = dept.strip()
+                if not d_term: continue
+
                 dept_query |= Q(name__icontains=d_term)
                 
-                # Bölüm araması için de basit Türkçe 'i' desteği
+                # Bölüm araması için de Türkçe 'i' ve 'ı' desteği
                 if 'i' in d_term:
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ'))
+                if 'ı' in d_term:
+                    dept_query |= Q(name__icontains=d_term.replace('ı', 'I'))
                     
             programs = programs.filter(dept_query)
 
@@ -393,18 +407,14 @@ class TercihMotoruView(views.APIView):
                 continue
             
             # Kategorizasyon Mantığı:
-            # Sürpriz: Bölüm sıralaması, öğrenci sıralamasından daha iyi (daha düşük sayı)
             if prog_rank < ranking * 0.90:
                 surprise.append(item)
-            # Garanti: Bölüm sıralaması, öğrenci sıralamasından %25 daha kötü (daha yüksek sayı)
             elif prog_rank > ranking * 1.25:
                 safe.append(item)
-            # İdeal: Aradaki bölge
             else:
                 ideal.append(item)
 
         # 6. Sonuçları Döndür
-        # Her kategoriden sıralamaya göre (en iyiden en kötüye) sıralayıp ilk 15'i gönderiyoruz.
         return Response({
             "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:15],
             "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:15],
