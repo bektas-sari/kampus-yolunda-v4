@@ -269,47 +269,79 @@ class TrackActivityView(views.APIView):
 
 class TercihMotoruView(views.APIView):
     """
-    Sınav sonucuna göre stratejik tercih yelpazesi sunan analiz motoru.
+    Frontend'den gelen POST isteğini karşılayan,
+    Şehir ve Bölüm filtrelerini esnek (büyük/küçük harf duyarsız) yapan motor.
     """
     permission_classes = [AllowAny]
 
-    def get(self, request):
-        siralama = request.query_params.get('siralama')
-        puan_turu = request.query_params.get('puan_turu')
-
-        if not siralama or not puan_turu:
-            return Response({"error": "Sıralama ve puan türü gereklidir."}, status=400)
-
+    def post(self, request):
+        # 1. Frontend'den gelen verileri al
         try:
-            siralama_int = int(siralama)
-        except ValueError:
-            return Response({"error": "Sıralama geçerli bir sayı olmalıdır."}, status=400)
+            ranking = int(request.data.get('student_ranking', 0))
+            score_type = request.data.get('score_type', 'SAY')
+            city_filter = request.data.get('city_filter', []) # Liste olarak gelir: ['istanbul', 'ankara']
+            dept_filter = request.data.get('department_filter', []) # Liste: ['bilgisayar']
+        except (ValueError, TypeError):
+            return Response({"error": "Geçersiz veri formatı."}, status=400)
+
+        if ranking == 0:
+            return Response({"error": "Sıralama bilgisi gereklidir."}, status=400)
+
+        # 2. Geniş Tarama Aralığı Belirle
+        # Öğrencinin sıralamasının %20'si (Çok yüksek hedefler) ile %60 fazlası (Garanti) arasını getir
+        min_limit = ranking * 0.20 
+        max_limit = ranking * 1.60
+
+        # 3. Temel Sorguyu Oluştur
+        programs = Department.objects.filter(
+            score_type=score_type,
+            ranking__range=(min_limit, max_limit)
+        ).select_related('university')
+
+        # 4. ESNEK ŞEHİR FİLTRESİ (Büyük/Küçük harf duyarsız)
+        if city_filter and len(city_filter) > 0:
+            city_query = Q()
+            for city in city_filter:
+                # icontains: İçinde geçiyor mu? (Case-insensitive)
+                # Örn: "ist" yazsa bile "İstanbul" gelir.
+                city_query |= Q(university__city__icontains=city)
+            programs = programs.filter(city_query)
+
+        # 5. ESNEK BÖLÜM FİLTRESİ
+        if dept_filter and len(dept_filter) > 0:
+            dept_query = Q()
+            for dept in dept_filter:
+                dept_query |= Q(name__icontains=dept)
+            programs = programs.filter(dept_query)
+
+        # 6. Kategorize Et (Sürpriz / İdeal / Güvenli)
+        # Veriyi çekip Python tarafında ayıralım
+        serialized_data = DepartmentSerializer(programs, many=True).data
         
-        # Yelpaze: %30 yukarı (Hayal) ve %50 aşağı (Güvenli)
-        min_rank = siralama_int * 0.7
-        max_rank = siralama_int * 1.5
+        surprise = []
+        ideal = []
+        safe = []
 
-        queryset = Department.objects.filter(
-            score_type=puan_turu,
-            ranking__range=(min_rank, max_rank)
-        ).select_related('university').order_by('ranking')
+        for item in serialized_data:
+            prog_rank = item['ranking']
+            
+            # Algoritma Mantığı:
+            if prog_rank < ranking * 0.90:
+                # Bölüm sıralaması öğrencininkinden %10 daha iyiyse -> Yüksek Hedef
+                surprise.append(item)
+            elif prog_rank > ranking * 1.25:
+                # Bölüm sıralaması öğrencininkinden %25 daha kötüyse -> Garanti
+                safe.append(item)
+            else:
+                # Aradaki bölge -> İdeal
+                ideal.append(item)
 
-        serializer = DepartmentSerializer(queryset, many=True)
-        
-        categorized_data = []
-        for item in serializer.data:
-            rank = item.get('ranking')
-            if rank:
-                if rank < siralama_int * 0.9:
-                    category = "HAYAL"
-                elif rank <= siralama_int * 1.15:
-                    category = "HEDEF"
-                else:
-                    category = "GÜVENLİ"
-                item['category'] = category
-                categorized_data.append(item)
-
-
+        # 7. Sonuçları Döndür (Her kategoriden en iyi 10-20 sonucu verelim ki sayfa şişmesin)
+        return Response({
+            "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:15],
+            "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:15],
+            "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:15]
+        })
 class PreferenceEngineView(APIView):
     """
     Gelişmiş Tercih Motoru (Preference Engine)
