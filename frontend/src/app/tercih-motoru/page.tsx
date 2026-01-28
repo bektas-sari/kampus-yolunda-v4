@@ -42,20 +42,55 @@ export default function TercihMotoruPage() {
     const [cityFilter, setCityFilter] = useState("");
     const [deptFilter, setDeptFilter] = useState("");
 
-    // --- İHTİMAL HESAPLAMA MATEMATİĞİ ---
+    // --- BİLİMSEL İHTİMAL HESAPLAMA MOTORU (YKS İSTATİSTİK TABANLI) ---
     const calculateProbability = (studentRank: number, deptRank: number | null) => {
-        if (!deptRank || !studentRank) return 0;
+        // 1. Veri Yoksa Hesaplama Yapma
+        if (!deptRank || !studentRank || studentRank <= 0) return 0;
 
-        // Basit bir olasılık algoritması
-        const ratio = deptRank / studentRank;
-        let chance = 0;
+        // 2. "Derece Öğrencisi" İstisnası (Rank 1 - 1000)
+        // Eğer öğrenci ilk 1000'de ise ve bölümün sıralaması ondan düşükse (daha yüksek sayıysa),
+        // bu öğrenci oraya %99.9 ihtimalle girer. Sapma payı yok denecek kadar azdır.
+        if (studentRank <= 1000 && deptRank >= studentRank) return 99;
 
-        if (ratio < 0.7) chance = 10 + (ratio * 15); // Çok zor (%10-%20)
-        else if (ratio < 1.0) chance = 20 + ((ratio - 0.7) * 100); // Riskli (%20-%50)
-        else if (ratio < 1.4) chance = 50 + ((ratio - 1.0) * 80); // İdeal (%50-%80)
-        else chance = 82 + ((ratio - 1.4) * 30); // Garanti (%82-%99)
+        // 3. Volatilite (Oynaklık) Faktörü
+        // Sıralama kötüleştikçe (sayı büyüdükçe), puanların yıllara göre oynama ihtimali artar.
+        // İlk 10k'da sıralamalar az oynar, 200k'da çok oynar.
+        let volatility = 0.10; // Varsayılan sapma %10
+        if (studentRank > 50000) volatility = 0.15;
+        if (studentRank > 150000) volatility = 0.20;
 
-        return Math.min(Math.round(chance), 99);
+        // 4. Fark Analizi (Gap Analysis)
+        // Pozitif Gap: Bölüm sıralaması öğrenciden büyük (Öğrenci daha iyi) -> Güvenli Bölge
+        const gap = (deptRank - studentRank) / studentRank;
+
+        let probability = 0;
+
+        if (gap >= 0) {
+            // --- GÜVENLİ BÖLGE ---
+            // Öğrenci bölümden daha iyi sıralamaya sahip.
+            if (gap > volatility) {
+                // Standart sapmanın bile ötesinde güvenli
+                probability = 95 + (gap * 2);
+            } else {
+                // Güvenli ama sınıra yakın (Örn: Geçen sene 50k, sen 49k'sın)
+                probability = 80 + (gap / volatility) * 15;
+            }
+        } else {
+            // --- RİSKLİ BÖLGE (SÜRPRİZ) ---
+            // Öğrenci bölümden daha kötü sıralamaya sahip. (Örn: Bölüm 40k, Öğrenci 50k)
+            const riskFactor = Math.abs(gap);
+
+            if (riskFactor <= volatility) {
+                // Risk toleransı içinde (Örn: Geçen sene 50k, sen 52k'sın. Girme şansın var.)
+                probability = 50 + (gap / volatility) * 40;
+            } else {
+                // Risk toleransı dışında (Çok zor) -> Üstel Düşüş
+                probability = 10 * Math.exp(-1 * (riskFactor - volatility) * 5);
+            }
+        }
+
+        // 5. Sınırlandırma (1 - 99 arası)
+        return Math.min(Math.max(Math.round(probability), 1), 99);
     };
 
     const handleAnalyze = async () => {
@@ -93,7 +128,7 @@ export default function TercihMotoruPage() {
         const uniCity = program.university?.city || "";
         const uniSlug = program.university?.slug || "#";
 
-        // İhtimal Hesapla
+        // İhtimal Hesapla (Yeni Bilimsel Fonksiyon)
         const probability = calculateProbability(parseInt(ranking), program.ranking);
 
         // Stil Ayarları
