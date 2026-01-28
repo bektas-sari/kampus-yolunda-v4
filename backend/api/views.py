@@ -313,9 +313,8 @@ class TrackActivityView(views.APIView):
 
 class TercihMotoruView(views.APIView):
     """
-    Frontend'den gelen POST isteğini karşılayan,
-    Türkçe karakter sorununu (i/İ, ı/I) çözen,
-    Öğrenci sıralamasına göre Sürpriz, İdeal ve Garanti tercihler sunan motor.
+    Segmentli Algoritma Kullanan Profesyonel Tercih Motoru
+    Derece öğrencileri (Rank 1-5000) için özel mantık içerir.
     """
     permission_classes = [AllowAny]
 
@@ -324,7 +323,7 @@ class TercihMotoruView(views.APIView):
             ranking = int(request.data.get('student_ranking', 0))
             score_type = request.data.get('score_type', 'SAY')
             
-            # Gelen veriyi listeye çevir (Güvenlik)
+            # Input Temizliği & Güvenlik
             raw_city = request.data.get('city_filter', [])
             raw_dept = request.data.get('department_filter', [])
             
@@ -334,47 +333,54 @@ class TercihMotoruView(views.APIView):
         except (ValueError, TypeError):
             return Response({"error": "Geçersiz veri formatı."}, status=400)
 
-        if ranking == 0:
-            return Response({"error": "Sıralama bilgisi gereklidir."}, status=400)
+        if ranking <= 0:
+            return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
 
-        # Tarama Aralığı
-        min_limit = ranking * 0.20 
-        max_limit = ranking * 1.60
+        # --- 1. SEGMENTLİ ARALIK BELİRLEME (DERECE ÖĞRENCİSİ DÜZELTMESİ) ---
+        
+        # Segment A: Derece (1 - 5.000)
+        # BURASI KRİTİK: Rank 1 gelirse (1 * 1.6) yapma. Direkt ilk 20.000'i getir.
+        if ranking < 5000:
+            min_limit = 0
+            max_limit = 20000 # Derece yapan öğrenci ilk 20 bindeki her şeyi görsün.
+        
+        # Segment B: Başarılı (5.000 - 50.000)
+        elif ranking < 50000:
+            min_limit = int(ranking * 0.70) # %30 daha iyisi
+            max_limit = int(ranking * 1.50) # %50 daha gerisi
+            
+        # Segment C: Orta (50.000 - 200.000)
+        elif ranking < 200000:
+            min_limit = int(ranking * 0.85)
+            max_limit = int(ranking * 1.60)
+            
+        # Segment D: Alt (200.000+)
+        else:
+            min_limit = int(ranking * 0.90)
+            max_limit = int(ranking * 2.00)
 
+        # Sorguyu Başlat
         programs = Department.objects.filter(
             score_type=score_type,
             ranking__range=(min_limit, max_limit)
         ).select_related('university')
 
-        # --- ŞEHİR FİLTRESİ (ASCII NORMALİZASYONU) ---
+        # --- 2. FİLTRELEME (Türkçe Karakter Destekli) ---
         if city_filter and len(city_filter) > 0:
             city_query = Q()
             for city in city_filter:
                 term = str(city).strip()
                 if not term: continue
-                
-                # Türkçe karakter varyasyonları (Backend uyumluluğu için)
-                replacements = {
-                    'İ': 'I', 'i': 'I', 
-                    'ı': 'I', 'I': 'I',
-                    'ş': 'S', 'Ş': 'S',
-                    'ç': 'C', 'Ç': 'C',
-                    'ğ': 'G', 'Ğ': 'G',
-                    'ü': 'U', 'Ü': 'U',
-                    'ö': 'O', 'Ö': 'O'
-                }
-                
+                # Türkçe karakter varyasyonları
+                replacements = {'İ': 'I', 'i': 'I', 'ı': 'I', 'I': 'I', 'ş': 'S', 'Ş': 'S', 'ç': 'C', 'Ç': 'C', 'ğ': 'G', 'Ğ': 'G', 'ü': 'U', 'Ü': 'U', 'ö': 'O', 'Ö': 'O'}
                 normalized_term = term.upper()
                 for tr, en in replacements.items():
                     normalized_term = normalized_term.replace(tr, en)
                 
-                # Hem normal halini hem normalize edilmiş halini ara
                 city_query |= Q(university__city__icontains=term)
                 city_query |= Q(university__city__icontains=normalized_term)
-
             programs = programs.filter(city_query)
 
-        # --- BÖLÜM FİLTRESİ ---
         if dept_filter and len(dept_filter) > 0:
             dept_query = Q()
             for dept in dept_filter:
@@ -383,10 +389,9 @@ class TercihMotoruView(views.APIView):
                 dept_query |= Q(name__icontains=d_term)
                 if 'i' in d_term:
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ'))
-                    
             programs = programs.filter(dept_query)
 
-        # SIRALAMA VE KATEGORİZE ETME
+        # --- 3. KATEGORİZASYON (RANK 1 MANTIĞI) ---
         serialized_data = DepartmentSerializer(programs, many=True).data
         
         surprise = []
@@ -397,15 +402,29 @@ class TercihMotoruView(views.APIView):
             prog_rank = item['ranking']
             if not prog_rank: continue
             
-            if prog_rank < ranking * 0.90:
-                surprise.append(item)
-            elif prog_rank > ranking * 1.25:
-                safe.append(item)
+            # Segment A (Derece) için özel dağılım:
+            if ranking < 5000:
+                # 1. olan öğrenci için "Sürpriz" (Yüksek Hedef) olamaz. Çünkü 1'den iyisi yok.
+                # Bu yüzden en iyi bölümleri "İdeal" ve "Güvenli"ye dağıtıyoruz.
+                
+                if prog_rank <= ranking * 1.5: 
+                    # Kendi sıralamasına yakın olanlar (Örn: Rank 1 ise Rank 1-2-3-10...)
+                    ideal.append(item)
+                else:
+                    # Biraz daha geridekiler
+                    safe.append(item)
             else:
-                ideal.append(item)
+                # Standart Kullanıcılar İçin
+                if prog_rank < ranking * 0.95: # Sıralamadan %5 daha iyi ve üzeri
+                    surprise.append(item)
+                elif prog_rank > ranking * 1.15: # Sıralamadan %15 daha kötü ve altı
+                    safe.append(item)
+                else: # Arası (%5 iyi ile %15 kötü arası)
+                    ideal.append(item)
 
+        # En iyi 20 sonucu döndür
         return Response({
-            "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:15],
-            "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:15],
-            "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:15]
+            "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:20],
+            "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:20],
+            "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:20]
         })
