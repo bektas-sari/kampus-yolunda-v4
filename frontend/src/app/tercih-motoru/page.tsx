@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { MapPin, ChevronRight, TrendingUp, Anchor, AlertCircle, Loader2, Sparkles, MessageSquareQuote, ChevronDown, ChevronUp } from "lucide-react";
@@ -28,7 +28,7 @@ interface Program {
     university: University;
     university_name: string;
     university_slug: string;
-    university_city?: string; // <--- Added this line
+    university_city?: string;
     university_logo: string | null;
     university_stats?: {
         academic_score: number;
@@ -122,7 +122,8 @@ const AutocompleteInput = ({ label, placeholder, value, onChange, options }: Aut
     );
 };
 
-export default function TercihMotoruPage() {
+// --- ANA İÇERİK BİLEŞENİ (Export Default DEĞİL) ---
+function TercihMotoruContent() {
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<AnalysisResult | null>(null);
 
@@ -417,5 +418,14 @@ export default function TercihMotoruPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+// --- BUILD HATASINI ÇÖZEN KAPSAYICI (Default Export) ---
+export default function TercihMotoruPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-[#020617] flex items-center justify-center text-white"><Loader2 className="w-10 h-10 animate-spin text-blue-500" /></div>}>
+            <TercihMotoruContent />
+        </Suspense>
     );
 }
