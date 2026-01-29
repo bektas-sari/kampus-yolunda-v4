@@ -10,3 +10,13 @@ python-dotenv
 requests
 Pillow
 numpy<2.0
+python-decouple
+
+# --- App Dependencies (Must be present for INSTALLED_APPS) ---
+django-jazzmin>=3.0
+django-cloudinary-storage
+cloudinary
+djangorestframework-simplejwt
+django-filter
+django-jsonform
+django-extensions
