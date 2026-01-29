@@ -16,8 +16,15 @@ const nextConfig = {
       },
       {
         protocol: 'http',
-        hostname: '127.0.0.1', // Localhost testleri için (gerekirse)
+        hostname: '127.0.0.1',
         port: '8000',
+        pathname: '/**',
+      },
+      // 👇 YENİ EKLENEN: Render Backend İzni (Tüm subdomainler)
+      {
+        protocol: 'https',
+        hostname: '**.onrender.com',
+        port: '',
         pathname: '/**',
       },
     ],
