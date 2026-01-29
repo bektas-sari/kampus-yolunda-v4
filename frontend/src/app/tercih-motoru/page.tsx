@@ -302,6 +302,7 @@ export default function TercihMotoruPage() {
                     </div>
 
                     <button
+                        id="btn-analyze-start"
                         onClick={handleAnalyze}
                         disabled={loading || !ranking}
                         className="w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
