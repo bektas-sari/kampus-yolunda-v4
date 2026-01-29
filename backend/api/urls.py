@@ -49,6 +49,7 @@ urlpatterns = [
 
     # Tercih Motoru Özel Endpoint
     path('tercih-motoru/', views.TercihMotoruView.as_view(), name='tercih_motoru'),
+    path('filters/', views.FilterView.as_view(), name='get_filters'),
 ]
 
 # Son guncelleme

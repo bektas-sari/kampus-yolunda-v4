@@ -1,8 +1,10 @@
+import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from cloudinary.models import CloudinaryField
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.utils.text import slugify
 
 # --- ÖZELLİK HAVUZU ---
 class Feature(models.Model):
@@ -52,7 +54,7 @@ class University(models.Model):
     founded_year = models.IntegerField(null=True, blank=True, verbose_name="Kuruluş Yılı")
     rector = models.CharField(max_length=100, blank=True, verbose_name="Rektör")
     
-    # İstatistikler
+    # İstatistikler (Genel)
     student_count = models.IntegerField(default=0, verbose_name="Toplam Öğrenci Sayısı")
     academician_count = models.IntegerField(default=0, verbose_name="Toplam Akademisyen Sayısı")
     prof_count = models.IntegerField(default=0, verbose_name="Profesör Sayısı")
@@ -85,6 +87,66 @@ class University(models.Model):
         verbose_name_plural = "Üniversiteler"
 
     def __str__(self): return self.name
+
+# --- 1. MODEL: RADAR GRAFİĞİ İÇİN (TÜMA / KALİTE VERİLERİ) ---
+# Bu model her üniversite için SADECE BİR tane olur (OneToOne).
+class UniversityStats(models.Model):
+    university = models.OneToOneField(
+        University, 
+        on_delete=models.CASCADE, 
+        related_name='stats', 
+        verbose_name="Üniversite"
+    )
+    
+    # TÜMA 2025 ve Radar Grafiği Verileri (0-100 Puan)
+    academic_score = models.IntegerField(default=50, verbose_name="Akademik Puan")
+    campus_score = models.IntegerField(default=50, verbose_name="Kampüs Puanı")
+    social_score = models.IntegerField(default=50, verbose_name="Sosyal Yaşam Puanı")
+    career_score = models.IntegerField(default=50, verbose_name="Kariyer Desteği Puanı")
+    tech_score = models.IntegerField(default=50, verbose_name="Teknoloji/İmkan Puanı")
+    city_score = models.IntegerField(default=70, verbose_name="Şehir Cazibesi")
+    
+    source = models.CharField(
+        max_length=100, 
+        default="TÜMA 2025", 
+        verbose_name="Veri Kaynağı"
+    )
+
+    class Meta:
+        verbose_name = "Üniversite Kalite Puanı (TÜMA)"
+        verbose_name_plural = "Üniversite Kalite Puanları"
+
+    def __str__(self):
+        return f"{self.university.name} - Kalite Skorları"
+
+# --- 2. MODEL: GÜNLÜK TRAFİK ANALİZİ İÇİN (PERFORMANS VERİLERİ) ---
+# Bu model her üniversite için HER GÜN yeni bir kayıt açar (ForeignKey).
+class UniversityAnalytics(models.Model):
+    university = models.ForeignKey(
+        University, 
+        on_delete=models.CASCADE, 
+        related_name='daily_analytics', 
+        verbose_name="Üniversite"
+    )
+    date = models.DateField(auto_now_add=True, verbose_name="Tarih")
+    
+    # Trafik Metrikleri
+    page_views = models.PositiveIntegerField(default=0, verbose_name="Sayfa Görüntülenme")
+    search_appearances = models.PositiveIntegerField(default=0, verbose_name="Aramada Görünme")
+    website_clicks = models.PositiveIntegerField(default=0, verbose_name="Website Tıklama")
+    phone_clicks = models.PositiveIntegerField(default=0, verbose_name="Telefon Tıklama")
+    
+    class Meta:
+        unique_together = ('university', 'date') # Bir üniversitenin aynı gün için tek kaydı olur
+        verbose_name = "Günlük Trafik Analizi"
+        verbose_name_plural = "Günlük Trafik Analizleri"
+        ordering = ['-date']
+        indexes = [
+            models.Index(fields=['date', 'university']),
+        ]
+
+    def __str__(self):
+        return f"{self.university.name} - {self.date} Analizi"
 
 # --- KAMPÜS MEKANI ---
 class CampusVenue(models.Model):
@@ -142,6 +204,16 @@ class Department(models.Model):
         verbose_name_plural = "Bölümler"
 
     def __str__(self): return f"{self.name} - {self.university.name}"
+
+class DepartmentStats(models.Model):
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='stats', verbose_name="Bölüm")
+    date = models.DateField(auto_now_add=True, verbose_name="Tarih")
+    page_views = models.PositiveIntegerField(default=0, verbose_name="Görüntülenme")
+
+    class Meta:
+        unique_together = ('department', 'date')
+        verbose_name = "Bölüm İstatistiği"
+        verbose_name_plural = "Bölüm İstatistikleri"
 
 # --- YURT MODELİ ---
 class Dormitory(models.Model):
@@ -222,6 +294,20 @@ class StudentHouse(models.Model):
         verbose_name_plural = "Öğrenci Evleri"
     def __str__(self): return self.title
 
+class StudentHouseConnection(models.Model):
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='connected_houses', verbose_name="Üniversite")
+    house = models.ForeignKey(StudentHouse, on_delete=models.CASCADE, related_name='connected_universities', verbose_name="Öğrenci Evi")
+    distance_text = models.CharField(max_length=100, verbose_name="Mesafe Bilgisi (Örn: 10 dk yürüme)", default="Bilinmiyor")
+    is_promoted = models.BooleanField(default=False, verbose_name="Vitrin/Partner Gösterimi")
+
+    class Meta:
+        verbose_name = "Üniversiteye Yakın Ev Bağlantısı"
+        verbose_name_plural = "Üniversiteye Yakın Ev Bağlantıları"
+        unique_together = ('university', 'house') 
+
+    def __str__(self):
+        return f"{self.university.name} - {self.house.title}"
+
 class HouseImage(models.Model):
     house = models.ForeignKey(StudentHouse, on_delete=models.CASCADE, related_name='gallery_images', verbose_name="Öğrenci Evi")
     image = models.ImageField(upload_to='house_gallery/', verbose_name="Resim")
@@ -283,7 +369,6 @@ class Scholarship(models.Model):
         verbose_name_plural = "Burs Fırsatları"
     def __str__(self): return self.title
 
-# --- HABERLER (Temizlendi: Embed/Show alanları kaldırıldı) ---
 class News(models.Model):
     CATEGORY_CHOICES = [('Gundem', 'Gündem'), ('Sinav', 'Sınav'), ('Kariyer', 'Kariyer'), ('Yasam', 'Yaşam'), ('Teknoloji', 'Teknoloji'), ('Burslar', 'Burslar')]
     
@@ -310,41 +395,8 @@ class News(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.slug:
-            from django.utils.text import slugify
-            import uuid
             self.slug = f"{slugify(self.title)}-{str(uuid.uuid4())[:8]}"
         super().save(*args, **kwargs)
-
-# --- İSTATİSTİKLER ---
-class UniversityStats(models.Model):
-    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='daily_stats', verbose_name="Üniversite")
-    date = models.DateField(auto_now_add=True, verbose_name="Tarih")
-    
-    page_views = models.PositiveIntegerField(default=0, verbose_name="Sayfa Görüntülenme")
-    search_appearances = models.PositiveIntegerField(default=0, verbose_name="Aramada Görünme")
-    website_clicks = models.PositiveIntegerField(default=0, verbose_name="Website Tıklama")
-    phone_clicks = models.PositiveIntegerField(default=0, verbose_name="Telefon Tıklama")
-    
-    class Meta:
-        unique_together = ('university', 'date')
-        verbose_name = "Üniversite İstatistiği"
-        verbose_name_plural = "Üniversite İstatistikleri"
-        indexes = [
-            models.Index(fields=['date', 'university']),
-        ]
-
-    def __str__(self):
-        return f"{self.university.name} - {self.date}"
-
-class DepartmentStats(models.Model):
-    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='stats', verbose_name="Bölüm")
-    date = models.DateField(auto_now_add=True, verbose_name="Tarih")
-    page_views = models.PositiveIntegerField(default=0, verbose_name="Görüntülenme")
-
-    class Meta:
-        unique_together = ('department', 'date')
-        verbose_name = "Bölüm İstatistiği"
-        verbose_name_plural = "Bölüm İstatistikleri"
 
 # --- LEAD (FORM BAŞVURULARI) ---
 class Lead(models.Model):
@@ -375,42 +427,7 @@ class Lead(models.Model):
     def __str__(self):
         return f"{self.get_lead_type_display()} - {self.name}"
 
-# --- DİĞER BAĞLANTILAR ---
-
-class StudentHouseConnection(models.Model):
-    """
-    Bir Üniversite ile Bir Öğrenci Evi arasındaki bağlantıyı ve mesafeyi tutar.
-    """
-    university = models.ForeignKey(
-        'University', 
-        on_delete=models.CASCADE, 
-        related_name='connected_houses',
-        verbose_name="Üniversite"
-    )
-    house = models.ForeignKey(
-        'StudentHouse', 
-        on_delete=models.CASCADE, 
-        related_name='connected_universities',
-        verbose_name="Öğrenci Evi"
-    )
-    distance_text = models.CharField(
-        max_length=100, 
-        verbose_name="Mesafe Bilgisi (Örn: 10 dk yürüme)",
-        default="Bilinmiyor"
-    )
-    is_promoted = models.BooleanField(
-        default=False, 
-        verbose_name="Vitrin/Partner Gösterimi"
-    )
-
-    class Meta:
-        verbose_name = "Üniversiteye Yakın Ev Bağlantısı"
-        verbose_name_plural = "Üniversiteye Yakın Ev Bağlantıları"
-        unique_together = ('university', 'house') 
-
-    def __str__(self):
-        return f"{self.university.name} - {self.house.title}"
-
+# --- DİĞERLERİ & ETKİLEŞİM ---
 class Promotion(models.Model):
     university = models.OneToOneField(University, on_delete=models.CASCADE, related_name='promotion')
     title = models.CharField(max_length=200, verbose_name="Başlık (Örn: %50 Burs İmkanı)")
@@ -450,23 +467,10 @@ class Review(models.Model):
 # --- YENİ MODEL: KAMPÜS REELS / VİDEO GALERİ ---
 class CampusReel(models.Model):
     title = models.CharField(max_length=255, verbose_name="Video Başlığı")
-    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='reels', verbose_name="Üniversite")
-    embed_code = models.TextField(verbose_name="Embed Kodu (Instagram/YouTube)")
-    show_on_homepage = models.BooleanField(default=False, verbose_name="Anasayfada Göster")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "Kampus Reel"
-        verbose_name_plural = "Kampus Reels Videolari"
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return self.title
-    title = models.CharField(max_length=255, verbose_name="Video Başlığı")
     
     # İlişki: Bu video hangi üniversiteye ait? (Boş bırakılırsa genel videodur)
     university = models.ForeignKey(
-        'University', 
+        University, 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True, 

@@ -5,8 +5,8 @@ from .models import (
     Department, Dormitory, DormitoryDistance, DormitoryImage, 
     StudentHouse, HouseImage, FavoriteStudentHouse, 
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
-    UniversityStats, DepartmentStats, Lead, 
-    StudentHouseConnection, Promotion, Review, CampusReel  # <--- BURAYA EKLENDİ
+    UniversityStats, UniversityAnalytics, DepartmentStats, Lead, # UniversityAnalytics EKLENDİ
+    StudentHouseConnection, Promotion, Review, CampusReel
 )
 
 # --- 1. ÖNCE CAMPUS REEL ---
@@ -20,6 +20,14 @@ class CampusReelAdmin(admin.ModelAdmin):
     fields = ('title', 'university', 'embed_code', 'show_on_homepage')
 
 # --- 2. YARDIMCI (INLINE) MODELLER ---
+
+# YENİ: Kalite Puanlarını Üniversite sayfasının içinde göstermek için
+class UniversityStatsInline(admin.StackedInline):
+    model = UniversityStats
+    can_delete = False
+    verbose_name_plural = 'Kalite Puanları (TÜMA)'
+    classes = ['collapse']
+
 class UniversityImageInline(admin.TabularInline):
     model = UniversityImage
     extra = 1
@@ -95,6 +103,7 @@ class UniversityAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
     
     inlines = [
+        UniversityStatsInline, # YENİ EKLENDİ: Puanları buradan yönet
         UniversityImageInline, 
         CampusVenueInline, 
         DepartmentInline, 
@@ -188,12 +197,30 @@ class LeadAdmin(admin.ModelAdmin):
     list_filter = ('lead_type', 'is_read', 'created_at')
     readonly_fields = ('created_at', 'ip_address')
 
+# --- YENİLENEN İSTATİSTİK ADMINLERİ ---
+
+# 1. TÜMA Puanları (Artık date/page_views yok)
 @admin.register(UniversityStats)
 class UniversityStatsAdmin(admin.ModelAdmin):
-    list_display = ('university', 'date', 'page_views')
-    readonly_fields = ('university', 'date', 'page_views', 'search_appearances', 'website_clicks', 'phone_clicks')
+    list_display = ('university', 'academic_score', 'campus_score', 'career_score', 'source')
+    search_fields = ('university__name',)
+    list_filter = ('source',)
+    # readonly_fields BURADAN KALDIRILDI çünkü date/page_views artık bu modelde değil
+
+# 2. Günlük Trafik Analizi (YENİ - Hata veren alanlar buraya taşındı)
+@admin.register(UniversityAnalytics)
+class UniversityAnalyticsAdmin(admin.ModelAdmin):
+    list_display = ('university', 'date', 'page_views', 'website_clicks')
+    list_filter = ('date', 'university')
+    search_fields = ('university__name',)
+    readonly_fields = ('date', 'page_views', 'search_appearances', 'website_clicks', 'phone_clicks')
 
 @admin.register(DepartmentStats)
 class DepartmentStatsAdmin(admin.ModelAdmin):
     list_display = ('department', 'date', 'page_views')
     readonly_fields = ('department', 'date', 'page_views')
+
+# Favorileri sadece listede görelim
+admin.site.register(FavoriteUniversity)
+admin.site.register(FavoriteDormitory)
+admin.site.register(FavoriteStudentHouse)

@@ -7,7 +7,8 @@ from .models import (
     StudentHouse, HouseImage, Feature,
     FavoriteUniversity, FavoriteDormitory, FavoriteStudentHouse,
     Scholarship, News, Lead,
-    StudentHouseConnection, Promotion, Review, CampusReel
+    StudentHouseConnection, Promotion, Review, CampusReel,
+    UniversityStats # <--- YENİ EKLENDİ
 )
 
 # --- 1. TEMEL VE YARDIMCI SERIALIZERS ---
@@ -101,14 +102,24 @@ class CampusVenueSerializer(serializers.ModelSerializer):
         if not obj.amenities: return []
         return [x.strip() for x in obj.amenities.split(',') if x.strip()]
 
+# --- YENİ: RADAR GRAFİĞİ İÇİN STATS SERIALIZER ---
+class UniversityStatsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UniversityStats
+        fields = [
+            'academic_score', 'campus_score', 'social_score', 
+            'career_score', 'tech_score', 'city_score', 'source'
+        ]
+
 # --- BÖLÜM SERIALIZER ---
 
 class SimpleUniversitySerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
+    stats = UniversityStatsSerializer(read_only=True) # Bölüm içinde üniversiteyi çekerken stats da gelsin
 
     class Meta:
         model = University
-        fields = ['name', 'slug', 'city', 'logo', 'logo_url', 'uni_type']
+        fields = ['name', 'slug', 'city', 'logo', 'logo_url', 'uni_type', 'stats']
 
     def get_logo_url(self, obj):
         if obj.logo: return obj.logo.url
@@ -151,6 +162,8 @@ class UniversityListSerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
     cover_image_url = serializers.SerializerMethodField()
     department_count = serializers.IntegerField(source='departments.count', read_only=True)
+    # Listede de stats göstermek istersen burayı açabilirsin, şimdilik gerek yok
+    # stats = UniversityStatsSerializer(read_only=True)
 
     class Meta:
         model = University
@@ -177,7 +190,9 @@ class UniversityDetailSerializer(serializers.ModelSerializer):
     venues = CampusVenueSerializer(many=True, read_only=True)
     promotion = PromotionSerializer(read_only=True)
     
-    # ESKİ YURT LİSTESİ YERİNE ARTIK BU FONKSİYONU KULLANIYORUZ:
+    # --- YENİ: RADAR GRAFİĞİ VERİSİ ---
+    stats = UniversityStatsSerializer(read_only=True)
+    
     dorm_connections = serializers.SerializerMethodField()
     reviews = serializers.SerializerMethodField()
     
@@ -195,8 +210,8 @@ class UniversityDetailSerializer(serializers.ModelSerializer):
             'description', 'website', 'phone', 'email', 'address', 'map_location',
             'logo', 'logo_url', 'cover_image', 'cover_image_url',
             'features', 'gallery_images', 'departments', 'venues', 
-            'features', 'gallery_images', 'departments', 'venues', 
-            'dorm_connections', 'promotion', 'reviews' # reviews EKLENDİ
+            'dorm_connections', 'promotion', 'reviews',
+            'stats' # <--- EKLENDİ
         ]
     
     def get_reviews(self, obj):
@@ -361,13 +376,16 @@ class ProgramSuggestionSerializer(serializers.ModelSerializer):
     university_type = serializers.ReadOnlyField(source='university.uni_type')
     university_logo = serializers.SerializerMethodField()
     
+    # --- YENİ: TERCİH SONUÇLARINDA DA GRAFİK VERİSİ GELSİN ---
+    university_stats = UniversityStatsSerializer(source='university.stats', read_only=True)
+    
     class Meta:
         model = Department
         fields = [
             'id', 'name', 'program_code', 'faculty', 'language', 'education_type',
             'score_type', 'duration', 'quota', 'base_score', 'ranking',
             'university_name', 'university_slug', 'university_city', 
-            'university_type', 'university_logo'
+            'university_type', 'university_logo', 'university_stats' # <--- EKLENDİ
         ]
 
     def get_university_logo(self, obj):

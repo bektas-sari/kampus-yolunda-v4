@@ -15,7 +15,7 @@ import LeadModal from "@/components/LeadModal";
 import ReviewModal from "@/components/ReviewModal";
 
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kampus-backend-4wes.onrender.com/';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 // --- TİP TANIMLAMALARI ---
 interface Feature {
@@ -142,7 +142,13 @@ function UniversityDetailContent() {
     useEffect(() => {
         const fetchDetail = async () => {
             try {
-                const res = await axios.get(`${BACKEND_URL}/api/universities/${slug}/`);
+                // Remove trailing slash from BACKEND_URL if present to avoid double slashes
+                const baseUrl = BACKEND_URL.endsWith('/') ? BACKEND_URL.slice(0, -1) : BACKEND_URL;
+                const requestUrl = `${baseUrl}/api/universities/${slug}/`;
+
+                console.log(`Fetching university detail: ${requestUrl}`);
+
+                const res = await axios.get(requestUrl);
                 setUni(res.data);
             } catch (error) {
                 console.error("Üniversite detayı çekilemedi:", error);

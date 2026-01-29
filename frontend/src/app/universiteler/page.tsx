@@ -8,7 +8,7 @@ import { MapPin, Search, Filter, Loader2, GraduationCap, Users, Crown, Sparkles 
 import axios from "axios";
 import FilterSidebar, { FilterConfig } from "@/components/FilterSidebar";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kampus-backend-4wes.onrender.com/';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 interface University {
   id: number;
@@ -53,6 +53,7 @@ function UniversitiesContent() {
       setLoading(true);
       try {
         const params = new URLSearchParams(Array.from(searchParams.entries()));
+        console.log("Fetching universities from:", `${BACKEND_URL}/api/universities/`);
         const res = await axios.get(`${BACKEND_URL}/api/universities/?${params.toString()}`);
         const data = Array.isArray(res.data) ? res.data : (res.data.results || []);
         setUniversities(data);

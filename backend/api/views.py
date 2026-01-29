@@ -35,8 +35,7 @@ from .serializers import (
     ReviewSerializer, ReviewCreateSerializer,
     FavoriteUniversitySerializer, FavoriteDormitorySerializer, FavoriteStudentHouseSerializer,
     CampusReelSerializer,
-    # Eğer ProgramSuggestionSerializer yoksa DepartmentSerializer kullanılır
-    DepartmentSerializer as ProgramSuggestionSerializer 
+    ProgramSuggestionSerializer # <-- IMPORT DÜZELTİLDİ
 )
 
 logger = logging.getLogger(__name__)
@@ -336,24 +335,23 @@ class TercihMotoruView(views.APIView):
         if ranking <= 0:
             return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
 
-        # --- 1. SEGMENTLİ ARALIK BELİRLEME (DERECE ÖĞRENCİSİ DÜZELTMESİ) ---
+        # --- 1. SEGMENTLİ ARALIK BELİRLEME ---
         
         # Segment A: Derece (1 - 5.000)
-        # DEĞİŞİKLİK: Üst limiti 20k'dan 300k'ya çıkardık. 
-        # Böylece derece öğrencisi, "Güvenli Liman" olarak tüm garantileri görebilecek.
+        # 300k tavanı ile güvenli limanları kapsa
         if ranking < 5000:
             min_limit = 0
-            max_limit = 300000 # <-- TAVANI KALDIRDIK (Önceki 20000 idi)
+            max_limit = 300000 
         
         # Segment B: Başarılı (5.000 - 50.000)
         elif ranking < 50000:
-            min_limit = int(ranking * 0.50) # %50 daha iyisini görsün (Sürprizleri kaçırmasın)
-            max_limit = int(ranking * 4.00) # Alt tarafı çok genişlet ki "Garanti"leri görsün
+            min_limit = int(ranking * 0.50)
+            max_limit = int(ranking * 4.00)
             
         # Segment C: Orta (50.000 - 200.000)
         elif ranking < 200000:
             min_limit = int(ranking * 0.80)
-            max_limit = int(ranking * 2.00)
+            max_limit = int(ranking * 2.50) # Biraz daha genişletildi
             
         # Segment D: Alt (200.000+)
         else:
@@ -361,10 +359,11 @@ class TercihMotoruView(views.APIView):
             max_limit = int(ranking * 2.00)
 
         # Sorguyu Başlat
+        # OPTİMİZASYON: 'university__stats' eklendi
         programs = Department.objects.filter(
             score_type=score_type,
             ranking__range=(min_limit, max_limit)
-        ).select_related('university')
+        ).select_related('university', 'university__stats') 
 
         # --- 2. FİLTRELEME (Türkçe Karakter Destekli) ---
         if city_filter and len(city_filter) > 0:
@@ -376,22 +375,18 @@ class TercihMotoruView(views.APIView):
                 # 1. Ham arama
                 city_query |= Q(university__city__icontains=term)
                 
-                # 2. ASCII (English) Upper: "izmir" -> "IZMIR"
-                term_ascii = term.replace("i", "i").upper() # Standard upper
-                city_query |= Q(university__city__icontains=term_ascii)
-
-                # 3. Turkish Upper: "izmir" -> "İZMİR"
-                # "i" -> "İ" ve "ı" -> "I" dönüşümlerini manuel yapıyoruz
-                term_tr = term.replace("i", "İ").replace("ı", "I").upper()
-                city_query |= Q(university__city__icontains=term_tr)
-                
-                # 4. Alternatifler/Yedekler
-                # Bazı DB'lerde IZMIR, bazılarında İZMİR, bazılarında Izmir olabilir.
-                # Hepsini kapsamak için varyasyonları ekliyoruz.
+                # 2. ASCII/TR Varyasyonları
                 replacements = {'İ': 'I', 'ı': 'I', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g', 'Ü': 'U', 'ü': 'u', 'Ö': 'O', 'ö': 'o', 'Ç': 'C', 'ç': 'c'}
                 term_normalized = term
                 for tr, en in replacements.items():
                     term_normalized = term_normalized.replace(tr, en)
+                
+                # Basit replace
+                term_ascii = term.replace("i", "i").upper() 
+                term_tr = term.replace("i", "İ").replace("ı", "I").upper()
+
+                city_query |= Q(university__city__icontains=term_ascii)
+                city_query |= Q(university__city__icontains=term_tr)
                 city_query |= Q(university__city__icontains=term_normalized)
 
             programs = programs.filter(city_query)
@@ -402,14 +397,14 @@ class TercihMotoruView(views.APIView):
                 d_term = str(dept).strip()
                 if not d_term: continue
                 dept_query |= Q(name__icontains=d_term)
-                # Bölüm araması için de Türkçe 'i' -> 'İ' desteği
                 if 'i' in d_term:
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ'))
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ').upper())
             programs = programs.filter(dept_query)
 
-        # --- 3. KATEGORİZASYON (RANK 1 MANTIĞI) ---
-        serialized_data = DepartmentSerializer(programs, many=True).data
+        # --- 3. KATEGORİZASYON ---
+        # FIX: Doğru serializer kullanıldı
+        serialized_data = ProgramSuggestionSerializer(programs, many=True).data
         
         surprise = []
         ideal = []
@@ -421,29 +416,37 @@ class TercihMotoruView(views.APIView):
             
             # Segment A (Derece) için özel dağılım:
             if ranking < 5000:
-                # Rank 1-5000 arası öğrenciler için "İdeal" kavramı esnetilmeli.
-                # Sadece (rank * 1.5) dersek, Rank 1 için 1.5 olur ve hiçbir şey İdeal'e girmez.
-                # Bu yüzden: En azından ilk 3000-5000'deki yerler "İdeal" sayılmalı.
-                
-                # Dinamik eşik: Kendi sıralamasının 1.5 katı VEYA sabit 3000 sıralaması (hangisi büyükse)
                 ideal_threshold = max(ranking * 1.5, 3000)
-                
                 if prog_rank <= ideal_threshold: 
                     ideal.append(item)
                 else:
                     safe.append(item)
             else:
                 # Standart Kullanıcılar İçin
-                if prog_rank < ranking * 0.95: # Sıralamadan %5 daha iyi ve üzeri
+                if prog_rank < ranking * 0.95: # Sürpriz
                     surprise.append(item)
-                elif prog_rank > ranking * 1.15: # Sıralamadan %15 daha kötü ve altı
+                elif prog_rank > ranking * 1.15: # Güvenli
                     safe.append(item)
-                else: # Arası (%5 iyi ile %15 kötü arası)
+                else: # İdeal
                     ideal.append(item)
 
-        # En iyi sonuçları döndür (Limit artırıldı)
         return Response({
             "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:50],
             "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:50],
             "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:50]
+        })
+
+class FilterView(views.APIView):
+    """
+    Tercih motoru autocomplete için filtre verilerini döner.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        cities = Department.objects.values_list('university__city', flat=True).distinct().order_by('university__city')
+        departments = Department.objects.values_list('name', flat=True).distinct().order_by('name')
+
+        return Response({
+            "cities": sorted(list(set([c for c in cities if c]))),
+            "departments": sorted(list(set([d for d in departments if d])))
         })

@@ -15,10 +15,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- GÜVENLİK AYARLARI ---
 # Production'da SECRET_KEY env'den gelmeli.
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-test-key-change-in-prod')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key')
 
 # Production'da bu KESİNLİKLE False olmalı.
-DEBUG = config('DEBUG', default=False, cast=bool)
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 # Render ve Vercel için Host Ayarları
 ALLOWED_HOSTS = ['*']
@@ -44,8 +44,9 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'cloudinary_storage',  # Staticfiles'dan önce!
+    'whitenoise.runserver_nostatic',  # WhiteNoise Dev
     'django.contrib.staticfiles',
+    'cloudinary_storage',
     'cloudinary',
 
     # --- 3. PARTI ARAÇLAR ---
@@ -63,7 +64,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # <--- WhiteNoise Added
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -92,16 +93,14 @@ TEMPLATES = [
 WSGI_APPLICATION = 'core.wsgi.application'
 
 # --- VERİTABANI AYARLARI ---
+# dj_database_url ile env'den oku, yoksa SQLite'a düş.
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600
     )
 }
-# SQLite SSL Hack
-if 'sqlite' in DATABASES['default']['ENGINE']:
-    DATABASES['default'].pop('OPTIONS', None)
-    
+
 # --- ŞİFRE GÜVENLİĞİ ---
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -118,18 +117,15 @@ USE_TZ = True
 
 # --- STATİK VE MEDYA DOSYALARI ---
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = BASE_DIR / 'staticfiles' # <--- WhiteNoise Root
+
+# WhiteNoise Storage
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 MEDIA_URL = '/media/'
 
-STORAGES = {
-    "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "cloudinary_storage.storage.StaticCloudinaryStorage",
-    },
-}
-STATICFILES_STORAGE = 'cloudinary_storage.storage.StaticCloudinaryStorage'
+# Media için Cloudinary (Static için WhiteNoise kullanıyoruz)
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # --- CLOUDINARY AYARLARI ---
 CLOUDINARY_STORAGE = {
@@ -139,7 +135,7 @@ CLOUDINARY_STORAGE = {
 }
 
 # --- CORS AYARLARI ---
-CORS_ALLOW_ALL_ORIGINS = False 
+CORS_ALLOW_ALL_ORIGINS = True # Geçici olarak True, Prod için spesifik domainleri ekleyin.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -191,7 +187,6 @@ JAZZMIN_SETTINGS = {
     "navigation_expanded": True,
     
     # --- İKON AYARLARI ---
-    # CampusReel buradan kaldırıldı (Otomatik görünmesi için)
     "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
@@ -216,5 +211,3 @@ JAZZMIN_UI_TWEAKS = {
     "theme": "flatly",
     "dark_mode_theme": "darkly",
 }
-
-CORS_ALLOW_ALL_ORIGINS = True
