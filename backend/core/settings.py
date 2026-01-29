@@ -211,3 +211,11 @@ JAZZMIN_UI_TWEAKS = {
     "theme": "flatly",
     "dark_mode_theme": "darkly",
 }
+
+# Statik dosyalar (CSS, JS)
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Medya dosyaları (Kullanıcı yüklemeleri, Logolar)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
