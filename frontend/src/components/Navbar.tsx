@@ -157,7 +157,7 @@ export default function Navbar() {
             <Link href="/universiteler" onClick={closeMobileMenu} className="text-gray-300 hover:text-white py-3 border-b border-white/5 text-lg font-medium">Üniversiteler</Link>
             <Link href="/yurtlar" onClick={closeMobileMenu} className="text-gray-300 hover:text-white py-3 border-b border-white/5 text-lg font-medium">Yurtlar</Link>
             <Link href="/ogrenci-evleri" onClick={closeMobileMenu} className="text-gray-300 hover:text-white py-3 border-b border-white/5 text-lg font-medium">Öğrenci Evleri</Link>
-            <Link href="/tercih-robotu" onClick={closeMobileMenu} className="text-gray-300 hover:text-white py-3 border-b border-white/5 text-lg font-medium">Tercih Motoru</Link>
+            <Link href="/tercih-motoru" onClick={closeMobileMenu} className="text-gray-300 hover:text-white py-3 border-b border-white/5 text-lg font-medium">Tercih Motoru</Link>
             <Link href="/burslar" onClick={closeMobileMenu} className="text-gray-300 hover:text-white py-3 border-b border-white/5 text-lg font-medium flex items-center gap-2">
               Burslar
               <span className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse" />
