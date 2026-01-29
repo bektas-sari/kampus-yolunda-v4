@@ -21,4 +21,4 @@ cloudinary
 djangorestframework-simplejwt
 django-filter
 django-jsonform
-# removed django-extensions to minimize dev-dependency conflicts
+django-extensions
