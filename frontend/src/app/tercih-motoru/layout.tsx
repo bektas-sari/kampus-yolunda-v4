@@ -1,6 +1,10 @@
 export const dynamic = "force-dynamic";
 
-export default function TercihLayout({ children }: { children: React.ReactNode }) {
+export default function TercihMotoruLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
     return (
         <>
             {children}
