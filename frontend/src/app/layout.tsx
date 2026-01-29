@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer"; // <-- Footer'ı import et
 import { Providers } from "@/components/Providers";
+import { GoogleTagManager } from '@next/third-parties/google'
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,6 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr">
+      <GoogleTagManager gtmId="GTM-MRMC2SDZ" />
       <body className={`${inter.className} bg-black text-white antialiased`}>
         <Providers>
           {/* Navbar her sayfada sabit */}
