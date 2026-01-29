@@ -1,24 +1,12 @@
-﻿# --- Core Framework ---
-Django>=5.0,<5.3
-djangorestframework>=3.14
+﻿Django>=5.0,<5.3
+djangorestframework
 django-cors-headers
 gunicorn
 whitenoise
 dj-database-url
 psycopg2-binary
-
-# --- Utilities ---
-pandas>=2.0
-numpy<2.0  # CRITICAL FIX: Prevent ResolutionImpossible with Pandas
+pandas
 python-dotenv
 requests
-python-decouple
-
-# --- App Dependencies ---
-django-jazzmin>=3.0
-django-cloudinary-storage
-cloudinary
-djangorestframework-simplejwt
-django-filter
-django-jsonform
-django-extensions
+Pillow
+numpy<2.0
