@@ -1,7 +1,6 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import User
-from cloudinary.models import CloudinaryField
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils.text import slugify
@@ -195,7 +194,15 @@ class Department(models.Model):
     quota = models.IntegerField(null=True, blank=True, verbose_name="Genel Kontenjan")
     school_rank_quota = models.IntegerField(null=True, blank=True, verbose_name="Okul 1. Kontenjanı")
     base_score = models.FloatField(null=True, blank=True, verbose_name="Taban Puan (2024)")
-    ranking = models.IntegerField(..., verbose_name="Başarı Sıralaması (2025 Tahmini)")
+    
+    # HATA BURADAYDI, ŞİMDİ DÜZELTİLDİ:
+    ranking = models.IntegerField(
+        verbose_name="Başarı Sıralaması (2025 Tahmini)", 
+        null=True, 
+        blank=True,
+        default=0
+    )
+    
     special_conditions = models.TextField(blank=True, verbose_name="Özel Koşullar")
     accreditation = models.CharField(max_length=100, blank=True, verbose_name="Akreditasyon")
 
@@ -433,7 +440,8 @@ class Promotion(models.Model):
     title = models.CharField(max_length=200, verbose_name="Başlık (Örn: %50 Burs İmkanı)")
     subtitle = models.CharField(max_length=200, verbose_name="Alt Başlık", blank=True)
     description = models.TextField(verbose_name="Kısa Açıklama")
-    image = CloudinaryField(verbose_name="Reklam Görseli", blank=True, null=True)
+    # GÜVENLİK İÇİN IMAGEFIELD'A ÇEVRİLDİ (Settings zaten Cloudinary):
+    image = models.ImageField(upload_to='promotions/', verbose_name="Reklam Görseli", blank=True, null=True)
     button_text = models.CharField(max_length=50, default="Detaylı Bilgi", verbose_name="Buton Yazısı")
     button_link = models.URLField(verbose_name="Yönlenecek Link")
     is_active = models.BooleanField(default=True, verbose_name="Yayında mı?")
