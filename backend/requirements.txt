@@ -20,3 +20,4 @@ djangorestframework-simplejwt
 django-filter
 django-jsonform
 django-extensions
+
