@@ -1,8 +1,11 @@
 import logging
+import os
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.db.models import F, Q
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
+from django.core.management import call_command
 
 from rest_framework import viewsets, filters, status, generics, views
 from rest_framework.response import Response
@@ -12,7 +15,6 @@ from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 
 # --- MODELLER ---
-from django.core.management import call_command # YENİ IMPORT
 from .models import (
     University, Department, Dormitory, StudentHouse, 
     Scholarship, News, Lead, Feature, CampusVenue, Promotion, Review, CampusReel,
@@ -39,26 +41,32 @@ from .serializers import (
     ProgramSuggestionSerializer 
 )
 
+# --- UTILS ---
+from .utils import calculate_probability
+
 logger = logging.getLogger(__name__)
 
 # --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
 class SystemWarmupView(views.APIView):
-    permission_classes = [AllowAny] 
+    """
+    Render Shell erişimi olmadığı için, HTTP üzerinden
+    CSV veri yükleme komutunu tetikler.
+    """
+    permission_classes = [AllowAny]
 
     def get(self, request):
         try:
             # 1. Aşama: İskeleti Kur (ÖSYM)
             call_command('load_osym_data')
             
-            # 2. Aşama: Ruhu Üfle (TÜMA - Opsiyonel, dosya varsa çalışır)
-            # TÜMA dosyasının proje ana dizininde 'memnuniyet.csv' adıyla olduğunu varsayıyoruz.
-            # Eğer dosya yoksa hata vermez, sadece çalışmaz.
-            if os.path.exists(os.path.join(settings.BASE_DIR, 'memnuniyet.csv')):
-                call_command('load_tuma_data', 'memnuniyet.csv')
+            # 2. Aşama: Ruhu Üfle (TÜMA - Opsiyonel)
+            tuma_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
+            if os.path.exists(tuma_path):
+                call_command('load_tuma_data', tuma_path)
             
             return Response({
                 "status": "success",
-                "message": "Sistem Tamamen Hazır: ÖSYM verileri yüklendi + TÜMA istatistikleri güncellendi."
+                "message": "Sistem Tamamen Hazır: ÖSYM verileri yüklendi."
             })
         except Exception as e:
             logger.error(f"Warmup Error: {e}")
@@ -66,16 +74,12 @@ class SystemWarmupView(views.APIView):
                 "status": "error",
                 "message": str(e)
             }, status=500)
-            
+
 # =============================================================================
 # 1. VIEWSETS (Standart CRUD İşlemleri)
 # =============================================================================
 
 class UniversityViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Üniversiteleri listeleme ve detay görüntüleme.
-    Slug üzerinden erişim sağlar.
-    """
     queryset = University.objects.all().order_by('-is_promoted', '-student_count')
     lookup_field = 'slug'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -89,13 +93,10 @@ class UniversityViewSet(viewsets.ReadOnlyModelViewSet):
         return UniversityDetailSerializer
 
 class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Bölümleri listeleme.
-    """
     queryset = Department.objects.all().select_related('university')
     serializer_class = DepartmentSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['score_type', 'education_type', 'university__city']
+    filterset_fields = ['score_type', 'university__city']
     search_fields = ['name', 'program_code', 'university__name']
     permission_classes = [AllowAny]
 
@@ -168,10 +169,6 @@ class CampusReelViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 class LeadViewSet(viewsets.ModelViewSet):
-    """
-    Kullanıcı başvurularını (Lead) toplar.
-    Oluşturmak (POST) herkese açık, listelemek sadece admin/yetkiliye.
-    """
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
     
@@ -181,9 +178,6 @@ class LeadViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    """
-    Yorum işlemleri. Generic relation yapısını manuel handle eder.
-    """
     queryset = Review.objects.filter(is_approved=True).order_by('-created_at')
     serializer_class = ReviewSerializer
     permission_classes = [AllowAny]
@@ -212,7 +206,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
                     author_name=serializer.validated_data['author_name'],
                     rating=serializer.validated_data['rating'],
                     comment=serializer.validated_data['comment'],
-                    is_approved=True, # Otomatik onay (Production'da False yapılabilir)
+                    is_approved=True, 
                     user=request.user if request.user.is_authenticated else None
                 )
                 return Response({"message": "Yorumunuz başarıyla yayınlandı."}, status=status.HTTP_201_CREATED)
@@ -291,9 +285,6 @@ class FavoriteDormitoryListView(generics.ListAPIView):
 # --- İSTATİSTİK TAKİBİ ---
 
 class TrackActivityView(views.APIView):
-    """
-    Görüntülenme ve tıklanma sayılarını atomik olarak artırır.
-    """
     permission_classes = [AllowAny]
     
     def post(self, request):
@@ -303,7 +294,6 @@ class TrackActivityView(views.APIView):
         today = timezone.now().date()
         
         try:
-            # Üniversite ile ilgili aksiyonlar
             if action_type in ['university_view', 'website_click', 'phone_click']:
                 if slug:
                     uni = University.objects.filter(slug=slug).first()
@@ -318,7 +308,6 @@ class TrackActivityView(views.APIView):
                         stats.save()
                         return Response({"status": "tracked"}, status=200)
             
-            # Bölüm görüntüleme aksiyonu
             elif action_type == 'dept_view':
                 if obj_id:
                     dept = Department.objects.filter(id=obj_id).first()
@@ -337,6 +326,7 @@ class TrackActivityView(views.APIView):
 # 3. TERCİH MOTORU (AKILLI FİLTRELEME & AI)
 # =============================================================================
 
+# --- TERCİH MOTORU ---
 class TercihMotoruView(views.APIView):
     """
     Segmentli Algoritma Kullanan Profesyonel Tercih Motoru
@@ -363,30 +353,20 @@ class TercihMotoruView(views.APIView):
             return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
 
         # --- 1. SEGMENTLİ ARALIK BELİRLEME ---
-        
-        # Segment A: Derece (1 - 5.000)
-        # 300k tavanı ile güvenli limanları kapsa
         if ranking < 5000:
             min_limit = 0
             max_limit = 300000 
-        
-        # Segment B: Başarılı (5.000 - 50.000)
         elif ranking < 50000:
             min_limit = int(ranking * 0.50)
             max_limit = int(ranking * 4.00)
-            
-        # Segment C: Orta (50.000 - 200.000)
         elif ranking < 200000:
             min_limit = int(ranking * 0.80)
-            max_limit = int(ranking * 2.50) # Biraz daha genişletildi
-            
-        # Segment D: Alt (200.000+)
+            max_limit = int(ranking * 2.50)
         else:
             min_limit = int(ranking * 0.90)
             max_limit = int(ranking * 2.00)
 
         # Sorguyu Başlat
-        # OPTİMİZASYON: 'university__stats' eklendi
         programs = Department.objects.filter(
             score_type=score_type,
             ranking__range=(min_limit, max_limit)
@@ -399,16 +379,12 @@ class TercihMotoruView(views.APIView):
                 term = str(city).strip()
                 if not term: continue
                 
-                # 1. Ham arama
-                city_query |= Q(university__city__icontains=term)
-                
-                # 2. ASCII/TR Varyasyonları
+                # Varyasyonlu Arama
                 replacements = {'İ': 'I', 'ı': 'I', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g', 'Ü': 'U', 'ü': 'u', 'Ö': 'O', 'ö': 'o', 'Ç': 'C', 'ç': 'c'}
                 term_normalized = term
                 for tr, en in replacements.items():
                     term_normalized = term_normalized.replace(tr, en)
                 
-                # Basit replace
                 term_ascii = term.replace("i", "i").upper() 
                 term_tr = term.replace("i", "İ").replace("ı", "I").upper()
 
@@ -429,14 +405,6 @@ class TercihMotoruView(views.APIView):
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ').upper())
             programs = programs.filter(dept_query)
 
-from .utils import calculate_probability # YENİ IMPORT
-
-# ... (Existing imports)
-
-# --- TERCİH MOTORU ---
-class TercihMotoruView(views.APIView):
-    # ... (Existing code)
-
         # --- 3. KATEGORİZASYON ---
         serialized_data = ProgramSuggestionSerializer(programs, many=True).data
         
@@ -448,7 +416,7 @@ class TercihMotoruView(views.APIView):
             prog_rank = item['ranking']
             if not prog_rank: continue
             
-            # Yeni Mantık: Utils üzerinden hesapla
+            # Utils üzerinden hesapla
             category = calculate_probability(ranking, prog_rank)
             
             if category == "Surprise":
@@ -457,18 +425,14 @@ class TercihMotoruView(views.APIView):
                 safe.append(item)
             elif category == "Ideal":
                 ideal.append(item)
-            # Dream kategorisi şimdilik gösterilmiyor veya Surprise içine atılabilir.
 
+        # Return ifadesi BURADA, 'def post' hizasında (içeride) olmalı.
         return Response({
             "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:50],
             "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:50],
             "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:50]
         })
-
 class FilterView(views.APIView):
-    """
-    Tercih motoru autocomplete için filtre verilerini döner.
-    """
     permission_classes = [AllowAny]
 
     def get(self, request):
