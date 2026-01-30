@@ -9,7 +9,8 @@ import {
     MapPin, Phone, Mail, Globe, Users, GraduationCap,
     Award, PlayCircle, Star, Search, Filter, Home, Loader2,
     ArrowRight, ExternalLink, Coffee, X, Info, CheckCircle,
-    Calendar, Languages, UserCheck, MessageCircle, ThumbsUp
+    Calendar, Languages, UserCheck, MessageCircle, ThumbsUp,
+    Trees, Briefcase, Building2, Zap
 } from "lucide-react";
 import LeadModal from "@/components/LeadModal";
 import ReviewModal from "@/components/ReviewModal";
@@ -21,6 +22,15 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 interface Feature {
     name: string;
     icon: string;
+}
+
+interface UniversityStats {
+    academic_score: number;
+    campus_score: number;
+    social_score: number;
+    career_score: number;
+    tech_score: number;
+    city_score: number;
 }
 
 interface Venue {
@@ -113,6 +123,7 @@ interface UniversityDetail {
     venues: Venue[];
     promotion?: Promotion;
     reviews: Review[]; // Yorumlar listesi
+    stats?: UniversityStats; // YENİ: Kalite Puanları
 }
 
 function UniversityDetailContent() {
@@ -201,6 +212,16 @@ function UniversityDetailContent() {
 
     if (!uni) return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white">Üniversite bulunamadı.</div>;
 
+    // TÜMA İstatistiklerini Güvenli Çekme (Yoksa varsayılan 50-70 arası puan gösterir)
+    const stats = uni.stats || {
+        academic_score: 75,
+        campus_score: 80,
+        social_score: 70,
+        career_score: 65,
+        tech_score: 70,
+        city_score: 85
+    };
+
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-gray-200 pb-20">
 
@@ -268,14 +289,16 @@ function UniversityDetailContent() {
                         <button onClick={() => setActiveTab('genel')} className={`px-6 py-4 font-bold text-sm uppercase tracking-wide transition-colors whitespace-nowrap border-b-2 ${activeTab === 'genel' ? "border-[#00ff88] text-[#00ff88]" : "border-transparent text-gray-400 hover:text-white"}`}>Genel Bakış</button>
                         <button onClick={() => setActiveTab('bolumler')} className={`px-6 py-4 font-bold text-sm uppercase tracking-wide transition-colors whitespace-nowrap border-b-2 ${activeTab === 'bolumler' ? "border-[#00ff88] text-[#00ff88]" : "border-transparent text-gray-400 hover:text-white"}`}>Bölümler & Puanlar</button>
                         <button onClick={() => setActiveTab('konaklama')} className={`px-6 py-4 font-bold text-sm uppercase tracking-wide transition-colors whitespace-nowrap border-b-2 ${activeTab === 'konaklama' ? "border-[#00ff88] text-[#00ff88]" : "border-transparent text-gray-400 hover:text-white"}`}>Yurtlar & Konaklama</button>
-                        {/* --- YENİ EKLENEN SEKME --- */}
                         <button onClick={() => setActiveTab('reviews')} className={`px-6 py-4 font-bold text-sm uppercase tracking-wide transition-colors whitespace-nowrap border-b-2 ${activeTab === 'reviews' ? "border-[#00ff88] text-[#00ff88]" : "border-transparent text-gray-400 hover:text-white"}`}>Öğrenci Yorumları</button>
                     </div>
 
                     {/* 1. GENEL BAKIŞ */}
                     {activeTab === 'genel' && (
                         <div className="space-y-8 animate-in fade-in duration-500">
+
+                            {/* --- İSTATİSTİK KUTULARI (TÜMA GÜNCELLEMESİ) --- */}
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                                {/* Rektör Kutusu (Varsa) */}
                                 {uni.rector && (
                                     <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center col-span-2 md:col-span-3 lg:col-span-2 flex flex-col justify-center">
                                         <UserCheck className="mx-auto text-[#00ff88] mb-1" size={20} />
@@ -283,27 +306,36 @@ function UniversityDetailContent() {
                                         <div className="text-[10px] text-gray-500 uppercase">Rektör</div>
                                     </div>
                                 )}
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center">
-                                    <Users className="mx-auto text-blue-400 mb-1" size={20} />
-                                    <div className="text-lg font-bold text-white">{uni.student_count?.toLocaleString()}</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Öğrenci</div>
+
+                                {/* Akademik Puan */}
+                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                    <GraduationCap className="mx-auto text-blue-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                    <div className="text-lg font-bold text-white">{stats.academic_score}/100</div>
+                                    <div className="text-[10px] text-gray-500 uppercase">Akademik İlgi</div>
                                 </div>
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center">
-                                    <GraduationCap className="mx-auto text-purple-400 mb-1" size={20} />
-                                    <div className="text-lg font-bold text-white">{uni.academician_count?.toLocaleString()}</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Akademisyen</div>
+
+                                {/* Kampüs Puanı */}
+                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                    <Trees className="mx-auto text-green-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                    <div className="text-lg font-bold text-white">{stats.campus_score}/100</div>
+                                    <div className="text-[10px] text-gray-500 uppercase">Kampüs Ortamı</div>
                                 </div>
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center">
-                                    <Award className="mx-auto text-yellow-400 mb-1" size={20} />
-                                    <div className="text-lg font-bold text-white">{uni.prof_count}</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Prof. Dr.</div>
+
+                                {/* Kariyer Puanı */}
+                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                    <Briefcase className="mx-auto text-purple-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                    <div className="text-lg font-bold text-white">{stats.career_score}/100</div>
+                                    <div className="text-[10px] text-gray-500 uppercase">Kariyer Desteği</div>
                                 </div>
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center">
-                                    <Award className="mx-auto text-orange-400 mb-1" size={20} />
-                                    <div className="text-lg font-bold text-white">{uni.doc_count}</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Doç. Dr.</div>
+
+                                {/* Şehir Puanı */}
+                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                    <Building2 className="mx-auto text-orange-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                    <div className="text-lg font-bold text-white">{stats.city_score}/100</div>
+                                    <div className="text-[10px] text-gray-500 uppercase">Şehir Cazibesi</div>
                                 </div>
                             </div>
+                            {/* --- İSTATİSTİK SONU --- */}
 
                             <div className="prose prose-invert max-w-none">
                                 <h3 className="text-white font-bold text-xl mb-4">Üniversite Hakkında</h3>
@@ -429,7 +461,7 @@ function UniversityDetailContent() {
                         </div>
                     )}
 
-                    {/* --- 4. ÖĞRENCİ YORUMLARI (YENİ VE EKSİK OLAN KISIM) --- */}
+                    {/* --- 4. ÖĞRENCİ YORUMLARI --- */}
                     {activeTab === 'reviews' && (
                         <div className="animate-in fade-in duration-500">
                             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
@@ -507,14 +539,14 @@ function UniversityDetailContent() {
                 {/* SAĞ: Sidebar */}
                 <div className="lg:col-span-4 space-y-6">
 
-                    {/* --- 1. KAMPÜSE YAKIN YERLER (GÜNCELLENDİ: Turuncu Öne Çıkanlar & Popup) --- */}
+                    {/* --- 1. KAMPÜSE YAKIN YERLER --- */}
                     {uni.venues && uni.venues.length > 0 && (
                         <div className="mb-6 animate-in slide-in-from-top-4 fade-in duration-500">
                             <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
                                 <Coffee className="text-[#00ff88]" size={20} /> Kampüse Yakın Yerler
                             </h3>
 
-                            {/* GRID YAPISI: Yan yana kutular */}
+                            {/* GRID YAPISI */}
                             <div className="grid grid-cols-2 gap-3">
                                 {uni.venues.map((venue) => (
                                     <div
@@ -527,7 +559,6 @@ function UniversityDetailContent() {
                                                 : 'border border-white/10 hover:border-[#00ff88]/50'}
                                         `}
                                     >
-                                        {/* Arka Plan Görseli */}
                                         <Image
                                             src={getImageUrl(venue.image)}
                                             alt={venue.name}
@@ -536,14 +567,12 @@ function UniversityDetailContent() {
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
 
-                                        {/* Öne Çıkan Badge */}
                                         {venue.is_sponsored && (
                                             <div className="absolute top-2 right-2 bg-orange-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5 z-10">
                                                 <Star size={8} fill="black" /> ÖNERİ MEKAN
                                             </div>
                                         )}
 
-                                        {/* İçerik */}
                                         <div className="absolute bottom-0 left-0 p-3 w-full">
                                             <span className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 block ${venue.is_sponsored ? 'text-orange-400' : 'text-[#00ff88]'}`}>
                                                 {venue.venue_type}
