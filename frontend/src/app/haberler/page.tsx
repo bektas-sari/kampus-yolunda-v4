@@ -44,11 +44,24 @@ export default function NewsPage() {
       const res = await axios.get<NewsResponse>(`${BACKEND_URL}/api/news/?page=${page}`);
 
       // Gelen veriyi işle
-      setNews(res.data.results);
+      const data = res.data as any;
+      let newsArray: NewsItem[] = [];
+      let totalCount = 0;
 
-      // Toplam sayfa sayısını hesapla (Toplam Kayıt / Sayfa Başına Adet)
-      // Örn: 17 kayıt / 12 = 1.41 -> Yukarı yuvarla -> 2 Sayfa
-      const calculatedTotalPages = Math.ceil(res.data.count / PAGE_SIZE);
+      if (Array.isArray(data)) {
+        // Pagination kapalıysa direkt array döner
+        newsArray = data;
+        totalCount = data.length;
+      } else if (data && data.results) {
+        // Pagination açıksa results döner
+        newsArray = data.results;
+        totalCount = data.count;
+      }
+
+      setNews(newsArray || []);
+
+      // Toplam sayfa sayısını hesapla
+      const calculatedTotalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
       setTotalPages(calculatedTotalPages);
 
     } catch (error) {
@@ -104,7 +117,7 @@ export default function NewsPage() {
           <p className="text-xl text-gray-400">Üniversite dünyasından en güncel gelişmeler, duyurular ve başarı hikayeleri.</p>
         </div>
 
-        {news.length > 0 ? (
+        {news && news.length > 0 ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {news.map((item) => (
@@ -175,8 +188,8 @@ export default function NewsPage() {
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                   className={`p-3 rounded-xl border flex items-center justify-center transition-all ${currentPage === 1
-                      ? "border-white/10 text-gray-700 cursor-not-allowed"
-                      : "border-white/20 text-white hover:bg-white/10 hover:border-[#00ff88] hover:text-[#00ff88]"
+                    ? "border-white/10 text-gray-700 cursor-not-allowed"
+                    : "border-white/20 text-white hover:bg-white/10 hover:border-[#00ff88] hover:text-[#00ff88]"
                     }`}
                 >
                   <ChevronLeft size={20} />
@@ -188,8 +201,8 @@ export default function NewsPage() {
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
                     className={`w-12 h-12 rounded-xl font-bold border transition-all flex items-center justify-center ${currentPage === pageNum
-                        ? "bg-[#00ff88] text-black border-[#00ff88] shadow-[0_0_15px_rgba(0,255,136,0.3)]"
-                        : "bg-transparent text-white border-white/20 hover:border-[#00ff88] hover:text-[#00ff88]"
+                      ? "bg-[#00ff88] text-black border-[#00ff88] shadow-[0_0_15px_rgba(0,255,136,0.3)]"
+                      : "bg-transparent text-white border-white/20 hover:border-[#00ff88] hover:text-[#00ff88]"
                       }`}
                   >
                     {pageNum}
@@ -201,8 +214,8 @@ export default function NewsPage() {
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
                   className={`p-3 rounded-xl border flex items-center justify-center transition-all ${currentPage === totalPages
-                      ? "border-white/10 text-gray-700 cursor-not-allowed"
-                      : "border-white/20 text-white hover:bg-white/10 hover:border-[#00ff88] hover:text-[#00ff88]"
+                    ? "border-white/10 text-gray-700 cursor-not-allowed"
+                    : "border-white/20 text-white hover:bg-white/10 hover:border-[#00ff88] hover:text-[#00ff88]"
                     }`}
                 >
                   <ChevronRight size={20} />
