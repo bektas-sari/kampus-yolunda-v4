@@ -6,17 +6,15 @@ from django.conf import settings
 from django.utils.text import slugify
 
 class Command(BaseCommand):
-    help = 'Load 2025 ÖSYM Data from osym_data.csv (With Rank Estimation)'
+    help = 'Load 2025 ÖSYM Data from osym_data.csv (Turbo/Bulk Mode)'
 
     def handle(self, *args, **kwargs):
         file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
         
-        # 1. TEMİZLİK: Sadece burada silme yapıyoruz (Sıfır Kurulum)
         self.stdout.write(self.style.WARNING("⚠️ Eski veriler temizleniyor (Sıfır Kurulum)..."))
         Department.objects.all().delete()
         University.objects.all().delete()
 
-        # Manuel Şehir Eşleştirmesi (Veri Bütünlüğü İçin)
         CITY_MAPPING = {
             "ADANA": "ADANA", "ADIYAMAN": "ADIYAMAN", "AFYON": "AFYONKARAHISAR", "AĞRI": "AGRI",
             "AKSARAY": "AKSARAY", "AMASYA": "AMASYA", "ANKARA": "ANKARA", "ANTALYA": "ANTALYA",
@@ -46,10 +44,16 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Dosya bulunamadı: {file_path}"))
             return
 
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
+        # 'errors=replace' ile bozuk karakterleri yoksayıyoruz (Encoding hatasını önler)
+        with open(file_path, 'r', encoding='utf-8-sig', errors='replace') as f:
             reader = csv.reader(f, delimiter=';')
-            next(reader, None) # Başlıkları atla
+            next(reader, None) 
             next(reader, None)
+
+            # --- OPTİMİZASYON: ÜNİVERSİTE ÖNBELLEĞİ ---
+            # Her satırda DB'ye sormamak için hafızada tutuyoruz
+            university_cache = {} 
+            departments_to_create = [] # Toplu kayıt listesi
 
             count = 0
             for row in reader:
@@ -67,43 +71,48 @@ class Command(BaseCommand):
 
                     if not prog_code or not uni_name: continue
 
-                    # Şehir Bulma Mantığı
-                    city = "ISTANBUL" # Varsayılan
-                    uni_upper = uni_name.upper()
+                    # 1. Üniversite İşlemi (Cache Kontrolü)
+                    if uni_name not in university_cache:
+                        # Şehir Bulma
+                        city = "ISTANBUL"
+                        uni_upper = uni_name.upper()
+                        
+                        found_city = False
+                        if "(" in uni_upper:
+                            potential = uni_upper.split("(")[-1].replace(")", "").strip()
+                            for k, v in CITY_MAPPING.items():
+                                if k in potential:
+                                    city = v
+                                    found_city = True
+                                    break
+                        if not found_city:
+                            for k, v in CITY_MAPPING.items():
+                                if k in uni_upper:
+                                    city = v
+                                    break
+
+                        # Tür
+                        uni_type = 'DEVLET'
+                        if 'VAKIF' in uni_type_raw.upper(): uni_type = 'VAKIF'
+                        elif 'KIBRIS' in uni_type_raw.upper(): uni_type = 'KIBRIS'
+                        elif 'YABANCI' in uni_type_raw.upper(): uni_type = 'YABANCI'
+
+                        # DB'ye Yaz (Sadece Üni için tek tek yazılır, sayısı azdır)
+                        uni_slug = slugify(uni_name)
+                        university, _ = University.objects.get_or_create(
+                            name=uni_name,
+                            defaults={
+                                'slug': uni_slug,
+                                'city': city, 
+                                'uni_type': uni_type
+                            }
+                        )
+                        university_cache[uni_name] = university
                     
-                    found_city = False
-                    if "(" in uni_upper:
-                        potential = uni_upper.split("(")[-1].replace(")", "").strip()
-                        for k, v in CITY_MAPPING.items():
-                            if k in potential:
-                                city = v
-                                found_city = True
-                                break
-                    
-                    if not found_city:
-                        for k, v in CITY_MAPPING.items():
-                            if k in uni_upper:
-                                city = v
-                                break
+                    # Cache'den al
+                    university = university_cache[uni_name]
 
-                    # Üniversite Türü
-                    uni_type = 'DEVLET'
-                    if 'VAKIF' in uni_type_raw.upper(): uni_type = 'VAKIF'
-                    elif 'KIBRIS' in uni_type_raw.upper(): uni_type = 'KIBRIS'
-                    elif 'YABANCI' in uni_type_raw.upper(): uni_type = 'YABANCI'
-
-                    # Üniversiteyi Oluştur
-                    uni_slug = slugify(uni_name)
-                    university, _ = University.objects.get_or_create(
-                        name=uni_name,
-                        defaults={
-                            'slug': uni_slug,
-                            'city': city, 
-                            'uni_type': uni_type
-                        }
-                    )
-
-                    # Sayısal Dönüşümler
+                    # 2. Veri Dönüşümleri
                     try: quota = int(quota_str)
                     except: quota = 0
                     
@@ -112,27 +121,33 @@ class Command(BaseCommand):
                         if min_score < 100: min_score = 0
                     except: min_score = 0.0
 
-                    # --- KRİTİK: PUANDAN SIRALAMA TÜRETME (RANK ESTIMATION) ---
-                    # ÖSYM verisinde sıralama yok. Motor çalışsın diye puana göre ters orantılı rank üretiyoruz.
+                    # Rank Tahmini
                     ranking = 0
                     if min_score > 100:
-                        # 560 tam puan. Puan düştükçe sıralama sayısı büyür (kötüleşir).
-                        # Katsayıyı biraz daha gerçekçi hale getirdim.
                         ranking = int((560 - min_score) * 2000) 
                         if ranking < 1: ranking = 1
 
-                    Department.objects.create(
-                        university=university,
-                        program_code=prog_code,
-                        name=dept_name,
-                        faculty=faculty,
-                        score_type=score_type,
-                        quota=quota,
-                        base_score=min_score,
-                        ranking=ranking # ARTIK 0 DEĞİL, TAHMİNİ SIRALAMA
+                    # 3. LİSTEYE EKLE (DB'ye Yazma!)
+                    departments_to_create.append(
+                        Department(
+                            university=university,
+                            program_code=prog_code,
+                            name=dept_name,
+                            faculty=faculty,
+                            score_type=score_type,
+                            quota=quota,
+                            base_score=min_score,
+                            ranking=ranking
+                        )
                     )
                     count += 1
                 except Exception as e:
                     continue
 
-        self.stdout.write(self.style.SUCCESS(f"✅ İskelet Kuruldu: {count} bölüm yüklendi. Tahmini sıralamalar oluşturuldu."))
+            # 4. TOPLU KAYIT (BULK CREATE) - İŞTE HIZ BURADA
+            if departments_to_create:
+                self.stdout.write("Veritabanına toplu yazılıyor (Bu işlem hızlı sürecek)...")
+                # 1000'erli paketler halinde kaydet
+                Department.objects.bulk_create(departments_to_create, batch_size=1000)
+
+        self.stdout.write(self.style.SUCCESS(f"✅ İŞLEM TAMAM: {count} bölüm şimşek hızında yüklendi!"))

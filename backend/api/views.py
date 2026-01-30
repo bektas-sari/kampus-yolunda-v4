@@ -47,34 +47,64 @@ from .utils import calculate_probability
 logger = logging.getLogger(__name__)
 
 # --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
+# --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
 class SystemWarmupView(views.APIView):
     """
     Render Shell erişimi olmadığı için, HTTP üzerinden
     CSV veri yükleme komutunu tetikler.
+    AYRICA: Otomatik Migration ve Hata Ayıklama yapar.
     """
     permission_classes = [AllowAny]
 
     def get(self, request):
+        status_report = []
         try:
-            # 1. Aşama: İskeleti Kur (ÖSYM)
-            call_command('load_osym_data')
+            # ADIM 1: Veritabanını Güncelle (Auto-Migrate)
+            # Eğer 'program_code' kolonu yoksa, bu komut onu oluşturur.
+            call_command('migrate', interactive=False)
+            status_report.append("✅ Veritabanı (Migration) güncellendi.")
+
+            # ADIM 2: Dosya Kontrolü
+            file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
+            if not os.path.exists(file_path):
+                # Dosya yoksa, nerede aradığımızı gösterelim
+                return Response({
+                    "status": "error", 
+                    "message": f"Dosya Bulunamadı! Aranan yer: {file_path}",
+                    "current_dir": os.getcwd(),
+                    "dir_content": os.listdir(settings.BASE_DIR)
+                }, status=200) # 200 dönüyoruz ki hatayı ekranda görelim
             
-            # 2. Aşama: Ruhu Üfle (TÜMA - Opsiyonel)
+            status_report.append(f"✅ Dosya bulundu: {file_path}")
+
+            # ADIM 3: Verileri Yükle
+            call_command('load_osym_data')
+            status_report.append("✅ ÖSYM Verileri Yüklendi.")
+
+            # ADIM 4: TÜMA (Opsiyonel)
             tuma_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
             if os.path.exists(tuma_path):
                 call_command('load_tuma_data', tuma_path)
+                status_report.append("✅ TÜMA Verileri Güncellendi.")
             
             return Response({
                 "status": "success",
-                "message": "Sistem Tamamen Hazır: ÖSYM verileri yüklendi."
-            })
-        except Exception as e:
-            logger.error(f"Warmup Error: {e}")
-            return Response({
-                "status": "error",
-                "message": str(e)
-            }, status=500)
+                "report": status_report,
+                "message": "Sistem Başarıyla Kuruldu."
+            }, status=200)
 
+        except Exception as e:
+            # Hata detayını yakala ve göster
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Warmup Error: {error_details}")
+            
+            return Response({
+                "status": "critical_error",
+                "error_summary": str(e),
+                "traceback": error_details, # Hatanın tam teknik detayı
+                "report_so_far": status_report
+            }, status=200) # 500 yerine 200 dönüyoruz ki tarayıcı hatayı gizlemesin
 # =============================================================================
 # 1. VIEWSETS (Standart CRUD İşlemleri)
 # =============================================================================
