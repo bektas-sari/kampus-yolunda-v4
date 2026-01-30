@@ -363,32 +363,52 @@ class TercihMotoruView(APIView):
     """
     permission_classes = [AllowAny]
 
-    def normalize_input(self, text):
+    def normalize_tr(self, text):
         """
-        Türkçe karakterleri İngilizce karşılıklarına çevirir (Arama genişletmek için)
+        Türkçe karakterleri ve tüm varyasyonları standart ASCII büyük harfe çevirir.
+        Bu sayede 'i' == 'İ' == 'I' == 'ı' eşitliği sağlanır.
         """
         if not text: return ""
-        replacements = {
-            "İ": "i", "I": "i", "ı": "i", "Ş": "s", "ş": "s", "Ğ": "g", "ğ": "g",
-            "Ü": "u", "ü": "u", "Ö": "o", "ö": "o", "Ç": "c", "ç": "c"
+        
+        # 1. Önce String'i temizle
+        text = str(text).strip()
+        
+        # 2. Harf Harf Dönüşüm (En garantisi budur)
+        # Python'un lower/upper metodları locale bağımlı olduğu için güvenilmez.
+        # Manuel mapping en iyisidir.
+        mapping = {
+            'i': 'I', 'İ': 'I', 'ı': 'I', 'I': 'I',
+            'ğ': 'G', 'Ğ': 'G', 'g': 'G', 'G': 'G',
+            'ü': 'U', 'Ü': 'U', 'u': 'U', 'U': 'U',
+            'ş': 'S', 'Ş': 'S', 's': 'S', 'S': 'S',
+            'ö': 'O', 'Ö': 'O', 'o': 'O', 'O': 'O',
+            'ç': 'C', 'Ç': 'C', 'c': 'C', 'C': 'C',
         }
-        text = text.lower()
-        for src, dest in replacements.items():
-            text = text.replace(src, dest)
-        return text
+        
+        normalized = []
+        for char in text:
+            if char in mapping:
+                normalized.append(mapping[char])
+            else:
+                normalized.append(char.upper()) # Diğer her şeyi standart büyüt
+                
+        return "".join(normalized)
 
     def serialize_program(self, prog):
         stats = None
         if hasattr(prog.university, 'stats'):
             s = prog.university.stats
-            stats = {
-                "academic_score": s.academic_score,
-                "campus_score": s.campus_score,
-                "social_score": s.social_score,
-                "career_score": s.career_score,
-                "tech_score": s.tech_score,
-                "city_score": s.city_score,
-            }
+            try:
+                stats = {
+                    "academic_score": s.academic_score,
+                    "campus_score": s.campus_score,
+                    "social_score": s.social_score,
+                    "career_score": s.career_score,
+                    "tech_score": s.tech_score,
+                    "city_score": s.city_score,
+                }
+            except:
+                stats = None
 
         return {
             "id": prog.id,
@@ -426,6 +446,7 @@ class TercihMotoruView(APIView):
                 return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
 
             # 1. Geniş Havuz (Ranking Aralığı)
+            # İsteğe göre buradaki mantığı utils.py'den de çekebilirsin ama şimdilik burada kalsın.
             if ranking < 5000:
                 min_limit, max_limit = 0, 300000 
             elif ranking < 50000:
@@ -435,105 +456,101 @@ class TercihMotoruView(APIView):
             else:
                 min_limit, max_limit = int(ranking * 0.90), int(ranking * 2.00)
 
-            # Temel Sorgu
-            programs = Department.objects.filter(
+            # Temel Sorgu (Veritabanından çek)
+            full_queryset = Department.objects.filter(
                 score_type=score_type,
                 ranking__range=(min_limit, max_limit)
             ).select_related('university', 'university__stats')
 
-            print(f"📊 Temel Havuz Sayısı: {programs.count()}")
+            print(f"📊 Temel Havuz Sayısı: {full_queryset.count()}")
 
-            # 2. ŞEHİR FİLTRESİ (Gelişmiş)
+            # 2. ŞEHİR FİLTRESİ (PYTHON-SIDE ROBUST FILTERING)
+            # Veritabanı collation sorunlarını kökten çözmek için ID bazlı filtreleme yapıyoruz.
             if city_filter and len(city_filter) > 0:
-                city_query = Q()
-                for city in city_filter:
-                    term = str(city).strip()
-                    if not term: continue
+                # A. Tüm Üniversitelerin ID ve Şehirlerini Çek (Sadece ~200 kayıt, çok hızlı)
+                all_unis = University.objects.values('id', 'city')
+                
+                # B. Kullanıcı Girdilerini Normalize Et
+                target_cities = [self.normalize_tr(c) for c in city_filter if c]
+                
+                # C. Eşleşen ID'leri Bul
+                matched_uni_ids = []
+                for uni in all_unis:
+                    db_city_norm = self.normalize_tr(uni['city'])
                     
-                    # 1. Tam Eşleşme (DB'deki haliyle)
-                    city_query |= Q(university__city__icontains=term)
-                    
-                    # 2. Türkçe Büyük Harf Desteği (istanbul -> İSTANBUL)
-                    tr_upper = term.replace("i", "İ").replace("ı", "I").upper()
-                    city_query |= Q(university__city__icontains=tr_upper)
+                    # Fuzzy Match: "ISTANBUL" içinde "STANBUL" geçiyor mu? Ya da tam tersi.
+                    for target in target_cities:
+                        # target: ISTANBUL, db: ISTANBUL -> Match
+                        # target: IZMIR, db: IZMIR -> Match
+                        if target in db_city_norm: 
+                            matched_uni_ids.append(uni['id'])
+                            break
+                
+                # D. QuerySet'i ID listesine göre filtrele
+                if matched_uni_ids:
+                    full_queryset = full_queryset.filter(university__id__in=matched_uni_ids)
+                else:
+                    # Hiçbir şehir eşleşmediyse sonuç boş dönmeli
+                    full_queryset = full_queryset.none()
+                
+                print(f"🏙️ Şehir Filtresi Sonrası: {full_queryset.count()}")
 
-                    # 3. ASCII Desteği (İstanbul -> ISTANBUL)
-                    ascii_upper = term.replace("İ", "I").replace("i", "I").replace("ı", "I").upper()
-                    city_query |= Q(university__city__icontains=ascii_upper)
-                    
-                    # 4. Özel Durumlar
-                    if "istanbul" in term.lower():
-                        city_query |= Q(university__city__icontains="STANBUL")
-                    elif "izmir" in term.lower():
-                        city_query |= Q(university__city__icontains="ZMIR")
-
-                programs = programs.filter(city_query)
-                print(f"🏙️ Şehir Filtresi Sonrası: {programs.count()}")
-
-            # 3. BÖLÜM FİLTRESİ (Gelişmiş Varyasyonlu)
+            # 3. BÖLÜM FİLTRESİ (DB Side - Q Objects)
+            # Bölüm sayısı çok olduğu için Python tarafına taşıyamayız, Q object ile devam.
             if dept_filter and len(dept_filter) > 0:
                 dept_query = Q()
                 for dept in dept_filter:
                     term = str(dept).strip()
                     if not term: continue
                     
-                    # Kullanıcı girdisini normalize et
-                    norm_term = self.normalize_input(term) # örn: turkce ogretmenligi
-
-                    # A. Standart Arama
+                    # A. Standart
                     dept_query |= Q(name__icontains=term)
                     
-                    # B. Türkçe Büyük Harf (türkçe -> TÜRKÇE)
-                    # Basit bir replace zinciri ile yaygın Türkçe karakterleri büyütelim
-                    term_upper = term.upper().replace("i", "İ").replace("ı", "I") 
-                    # Python'un upper'ı "i"yi "I" yapar, o yüzden manuel düzeltme gerekebilir ama
-                    # Veritabanındaki veri "TÜRKÇE" ise icontains genelde yetmeyebilir.
+                    # B. Normalize Edilmiş Varyasyon
+                    # Girdi: "hemşire" -> "HEMSIRE"
+                    # DB'de "HEMŞİRE" varsa bulamaz. O yüzden hem orjinalini hem de normalize edilmişini dene.
                     
-                    # C. Joker Karakterli Arama (En Garantisi)
-                    # "Türkçe" kelimesindeki ü, ç gibi harflerin yerine ne gelirse gelsin bulmaya çalışalım.
-                    # Bu biraz maliyetlidir ama kesin sonuç verir.
-                    # Şimdilik "normalize" edilmiş versiyon üzerinden gidelim:
+                    norm_term = self.normalize_tr(term) # HEMSIRE
                     
-                    # Varyasyon 1: Girilen kelime (Olduğu gibi)
-                    # Varyasyon 2: Büyük harf (Python default) -> TURKCE
-                    # Varyasyon 3: Türkçe Büyük Harf (Manual) -> TÜRKÇE
+                    # Veritabanında tam ASCII kayıtlı olabilir mi? Sanmam ama yine de deneyelim.
+                    # Q(name__icontains=norm_term) 
                     
-                    tr_map = str.maketrans("iıüöçşğ", "İIÜÖÇŞĞ")
-                    term_tr_upper = term.translate(tr_map).upper()
+                    # C. Manuel Tricky Durumlar (i -> İ)
+                    # "bilgisayar" -> "BİLGİSAYAR"
+                    tr_upper = term.upper().replace('I', 'İ') # Python upper I yapar, biz İ yapalım
+                    dept_query |= Q(name__icontains=tr_upper)
                     
-                    dept_query |= Q(name__icontains=term_tr_upper)
+                    # Genişletilmiş arama
+                    if "HEMSIRE" in norm_term: dept_query |= Q(name__icontains="HEMŞİRE")
+                    if "OGRETMEN" in norm_term: dept_query |= Q(name__icontains="ÖĞRETMEN")
                     
-                    # 'i' ve 'İ' karmaşası için özel bypass
-                    if "rkce" in norm_term or "rkçe" in norm_term: # Türkçe/Turkce
-                         dept_query |= Q(name__icontains="RKÇE")
-                         dept_query |= Q(name__icontains="RKCE")
-                    
-                    if "gretmen" in norm_term: # Öğretmenlik/Ogretmenlik
-                         dept_query |= Q(name__icontains="RETMEN") # Başındaki Ğ/G harfini atlayıp gövdeyi ara
+                full_queryset = full_queryset.filter(dept_query)
+                print(f"📚 Bölüm Filtresi Sonrası: {full_queryset.count()}")
 
-                programs = programs.filter(dept_query)
-                print(f"📚 Bölüm Filtresi Sonrası: {programs.count()}")
-
-            # 4. Kategorizasyon
-            all_programs_list = list(programs[:200]) # Limit koy
+            # 4. Kategorizasyon (Python Side)
+            # İlk 300 sonucu alıp işleyelim (Performans için)
+            programs_list = list(full_queryset[:300]) 
+            
             surprise, ideal, safe = [], [], []
 
-            for prog in all_programs_list:
+            for prog in programs_list:
                 if not prog.ranking: continue
-                diff = prog.ranking - ranking
                 
-                # Basitleştirilmiş Mantık
-                if diff < 0 and abs(diff) < ranking * 0.3: # Biraz daha iyi sıralama
-                    surprise.append(self.serialize_program(prog))
-                elif diff >= 0 and diff < ranking * 0.4: # Yakın sıralama
-                    ideal.append(self.serialize_program(prog))
-                elif diff >= ranking * 0.4: # Garanti
-                    safe.append(self.serialize_program(prog))
+                # utils.py varsa oradan, yoksa manuel
+                try:
+                    category = calculate_probability(ranking, prog.ranking)
+                except:
+                    # Fallback Logic
+                    diff = prog.ranking - ranking
+                    if diff < 0: category = "Surprise"
+                    elif diff < ranking * 0.2: category = "Ideal"
+                    else: category = "Safe"
                 
-                # Derece öğrencileri için istisna
-                if ranking < 5000:
-                    if prog.ranking < ranking: surprise.append(self.serialize_program(prog))
-                    else: ideal.append(self.serialize_program(prog))
+                data = self.serialize_program(prog)
+                
+                if category == "Surprise": surprise.append(data)
+                elif category == "Safe": safe.append(data)
+                else: ideal.append(data)
 
             print(f"✅ SONUÇ: {len(surprise)} Sürpriz, {len(ideal)} İdeal, {len(safe)} Güvenli")
 
