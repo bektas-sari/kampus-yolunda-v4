@@ -47,7 +47,6 @@ from .utils import calculate_probability
 logger = logging.getLogger(__name__)
 
 # --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
-# --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
 class SystemWarmupView(views.APIView):
     """
     Render Shell erişimi olmadığı için, HTTP üzerinden
@@ -60,20 +59,18 @@ class SystemWarmupView(views.APIView):
         status_report = []
         try:
             # ADIM 1: Veritabanını Güncelle (Auto-Migrate)
-            # Eğer 'program_code' kolonu yoksa, bu komut onu oluşturur.
             call_command('migrate', interactive=False)
             status_report.append("✅ Veritabanı (Migration) güncellendi.")
 
             # ADIM 2: Dosya Kontrolü
             file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
             if not os.path.exists(file_path):
-                # Dosya yoksa, nerede aradığımızı gösterelim
                 return Response({
                     "status": "error", 
                     "message": f"Dosya Bulunamadı! Aranan yer: {file_path}",
                     "current_dir": os.getcwd(),
                     "dir_content": os.listdir(settings.BASE_DIR)
-                }, status=200) # 200 dönüyoruz ki hatayı ekranda görelim
+                }, status=200)
             
             status_report.append(f"✅ Dosya bulundu: {file_path}")
 
@@ -94,7 +91,6 @@ class SystemWarmupView(views.APIView):
             }, status=200)
 
         except Exception as e:
-            # Hata detayını yakala ve göster
             import traceback
             error_details = traceback.format_exc()
             logger.error(f"Warmup Error: {error_details}")
@@ -102,9 +98,10 @@ class SystemWarmupView(views.APIView):
             return Response({
                 "status": "critical_error",
                 "error_summary": str(e),
-                "traceback": error_details, # Hatanın tam teknik detayı
+                "traceback": error_details,
                 "report_so_far": status_report
-            }, status=200) # 500 yerine 200 dönüyoruz ki tarayıcı hatayı gizlemesin
+            }, status=200)
+
 # =============================================================================
 # 1. VIEWSETS (Standart CRUD İşlemleri)
 # =============================================================================
@@ -353,115 +350,201 @@ class TrackActivityView(views.APIView):
         return Response({"status": "invalid_action_or_missing_data"}, status=400)
 
 # =============================================================================
-# 3. TERCİH MOTORU (AKILLI FİLTRELEME & AI)
+# 3. TERCİH MOTORU (AKILLI FİLTRELEME & AI) - GÜNCELLENMİŞ VERSİYON
 # =============================================================================
 
-# --- TERCİH MOTORU ---
-class TercihMotoruView(views.APIView):
+# api/views.py dosyasındaki TercihMotoruView sınıfını bununla değiştirin:
+
+class TercihMotoruView(APIView):
     """
-    Segmentli Algoritma Kullanan Profesyonel Tercih Motoru
-    Derece öğrencileri (Rank 1-5000) için özel mantık içerir.
+    Segmentli Algoritma + Gelişmiş Türkçe Karakter Desteği + Debug Logları
     """
     permission_classes = [AllowAny]
 
+    def normalize_input(self, text):
+        """
+        Türkçe karakterleri İngilizce karşılıklarına çevirir (Arama genişletmek için)
+        """
+        if not text: return ""
+        replacements = {
+            "İ": "i", "I": "i", "ı": "i", "Ş": "s", "ş": "s", "Ğ": "g", "ğ": "g",
+            "Ü": "u", "ü": "u", "Ö": "o", "ö": "o", "Ç": "c", "ç": "c"
+        }
+        text = text.lower()
+        for src, dest in replacements.items():
+            text = text.replace(src, dest)
+        return text
+
+    def serialize_program(self, prog):
+        stats = None
+        if hasattr(prog.university, 'stats'):
+            s = prog.university.stats
+            stats = {
+                "academic_score": s.academic_score,
+                "campus_score": s.campus_score,
+                "social_score": s.social_score,
+                "career_score": s.career_score,
+                "tech_score": s.tech_score,
+                "city_score": s.city_score,
+            }
+
+        return {
+            "id": prog.id,
+            "name": prog.name,
+            "program_code": prog.program_code,
+            "faculty": prog.faculty,
+            "score_type": prog.score_type,
+            "quota": prog.quota,
+            "ranking": prog.ranking,
+            "points": prog.base_score,
+            "education_type": prog.education_type,
+            "university_name": prog.university.name,
+            "university_slug": prog.university.slug,
+            "university_city": prog.university.city,
+            "university_logo": prog.university.logo.url if prog.university.logo else None,
+            "university_stats": stats
+        }
+
     def post(self, request):
         try:
+            # Gelen Verileri Al
             ranking = int(request.data.get('student_ranking', 0))
             score_type = request.data.get('score_type', 'SAY')
             
-            # Input Temizliği & Güvenlik
+            # Filtreleri Liste Haline Getir
             raw_city = request.data.get('city_filter', [])
             raw_dept = request.data.get('department_filter', [])
             
             city_filter = [raw_city] if isinstance(raw_city, str) else raw_city
             dept_filter = [raw_dept] if isinstance(raw_dept, str) else raw_dept
 
-        except (ValueError, TypeError):
-            return Response({"error": "Geçersiz veri formatı."}, status=400)
+            print(f"🔍 ARAMA BAŞLADI: Rank={ranking}, Tip={score_type}, Şehir={city_filter}, Bölüm={dept_filter}")
 
-        if ranking <= 0:
-            return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
+            if ranking <= 0:
+                return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
 
-        # --- 1. SEGMENTLİ ARALIK BELİRLEME ---
-        if ranking < 5000:
-            min_limit = 0
-            max_limit = 300000 
-        elif ranking < 50000:
-            min_limit = int(ranking * 0.50)
-            max_limit = int(ranking * 4.00)
-        elif ranking < 200000:
-            min_limit = int(ranking * 0.80)
-            max_limit = int(ranking * 2.50)
-        else:
-            min_limit = int(ranking * 0.90)
-            max_limit = int(ranking * 2.00)
+            # 1. Geniş Havuz (Ranking Aralığı)
+            if ranking < 5000:
+                min_limit, max_limit = 0, 300000 
+            elif ranking < 50000:
+                min_limit, max_limit = int(ranking * 0.50), int(ranking * 4.00)
+            elif ranking < 200000:
+                min_limit, max_limit = int(ranking * 0.80), int(ranking * 2.50)
+            else:
+                min_limit, max_limit = int(ranking * 0.90), int(ranking * 2.00)
 
-        # Sorguyu Başlat
-        programs = Department.objects.filter(
-            score_type=score_type,
-            ranking__range=(min_limit, max_limit)
-        ).select_related('university', 'university__stats') 
+            # Temel Sorgu
+            programs = Department.objects.filter(
+                score_type=score_type,
+                ranking__range=(min_limit, max_limit)
+            ).select_related('university', 'university__stats')
 
-        # --- 2. FİLTRELEME (Türkçe Karakter Destekli) ---
-        if city_filter and len(city_filter) > 0:
-            city_query = Q()
-            for city in city_filter:
-                term = str(city).strip()
-                if not term: continue
+            print(f"📊 Temel Havuz Sayısı: {programs.count()}")
+
+            # 2. ŞEHİR FİLTRESİ (Gelişmiş)
+            if city_filter and len(city_filter) > 0:
+                city_query = Q()
+                for city in city_filter:
+                    term = str(city).strip()
+                    if not term: continue
+                    
+                    # 1. Tam Eşleşme (DB'deki haliyle)
+                    city_query |= Q(university__city__icontains=term)
+                    
+                    # 2. Türkçe Büyük Harf Desteği (istanbul -> İSTANBUL)
+                    tr_upper = term.replace("i", "İ").replace("ı", "I").upper()
+                    city_query |= Q(university__city__icontains=tr_upper)
+
+                    # 3. ASCII Desteği (İstanbul -> ISTANBUL)
+                    ascii_upper = term.replace("İ", "I").replace("i", "I").replace("ı", "I").upper()
+                    city_query |= Q(university__city__icontains=ascii_upper)
+                    
+                    # 4. Özel Durumlar
+                    if "istanbul" in term.lower():
+                        city_query |= Q(university__city__icontains="STANBUL")
+                    elif "izmir" in term.lower():
+                        city_query |= Q(university__city__icontains="ZMIR")
+
+                programs = programs.filter(city_query)
+                print(f"🏙️ Şehir Filtresi Sonrası: {programs.count()}")
+
+            # 3. BÖLÜM FİLTRESİ (Gelişmiş Varyasyonlu)
+            if dept_filter and len(dept_filter) > 0:
+                dept_query = Q()
+                for dept in dept_filter:
+                    term = str(dept).strip()
+                    if not term: continue
+                    
+                    # Kullanıcı girdisini normalize et
+                    norm_term = self.normalize_input(term) # örn: turkce ogretmenligi
+
+                    # A. Standart Arama
+                    dept_query |= Q(name__icontains=term)
+                    
+                    # B. Türkçe Büyük Harf (türkçe -> TÜRKÇE)
+                    # Basit bir replace zinciri ile yaygın Türkçe karakterleri büyütelim
+                    term_upper = term.upper().replace("i", "İ").replace("ı", "I") 
+                    # Python'un upper'ı "i"yi "I" yapar, o yüzden manuel düzeltme gerekebilir ama
+                    # Veritabanındaki veri "TÜRKÇE" ise icontains bazen yetmeyebilir.
+                    
+                    # C. Joker Karakterli Arama (En Garantisi)
+                    # "Türkçe" kelimesindeki ü, ç gibi harflerin yerine ne gelirse gelsin bulmaya çalışalım.
+                    # Bu biraz maliyetlidir ama kesin sonuç verir.
+                    # Şimdilik "normalize" edilmiş versiyon üzerinden gidelim:
+                    
+                    # Varyasyon 1: Girilen kelime (Olduğu gibi)
+                    # Varyasyon 2: Büyük harf (Python default) -> TURKCE
+                    # Varyasyon 3: Türkçe Büyük Harf (Manual) -> TÜRKÇE
+                    
+                    tr_map = str.maketrans("iıüöçşğ", "İIÜÖÇŞĞ")
+                    term_tr_upper = term.translate(tr_map).upper()
+                    
+                    dept_query |= Q(name__icontains=term_tr_upper)
+                    
+                    # 'i' ve 'İ' karmaşası için özel bypass
+                    if "rkce" in norm_term or "rkçe" in norm_term: # Türkçe/Turkce
+                         dept_query |= Q(name__icontains="RKÇE")
+                         dept_query |= Q(name__icontains="RKCE")
+                    
+                    if "gretmen" in norm_term: # Öğretmenlik/Ogretmenlik
+                         dept_query |= Q(name__icontains="RETMEN") # Başındaki Ğ/G harfini atlayıp gövdeyi ara
+
+                programs = programs.filter(dept_query)
+                print(f"📚 Bölüm Filtresi Sonrası: {programs.count()}")
+
+            # 4. Kategorizasyon
+            all_programs_list = list(programs[:200]) # Limit koy
+            surprise, ideal, safe = [], [], []
+
+            for prog in all_programs_list:
+                if not prog.ranking: continue
+                diff = prog.ranking - ranking
                 
-                # Varyasyonlu Arama
-                replacements = {'İ': 'I', 'ı': 'I', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g', 'Ü': 'U', 'ü': 'u', 'Ö': 'O', 'ö': 'o', 'Ç': 'C', 'ç': 'c'}
-                term_normalized = term
-                for tr, en in replacements.items():
-                    term_normalized = term_normalized.replace(tr, en)
+                # Basitleştirilmiş Mantık
+                if diff < 0 and abs(diff) < ranking * 0.3: # Biraz daha iyi sıralama
+                    surprise.append(self.serialize_program(prog))
+                elif diff >= 0 and diff < ranking * 0.4: # Yakın sıralama
+                    ideal.append(self.serialize_program(prog))
+                elif diff >= ranking * 0.4: # Garanti
+                    safe.append(self.serialize_program(prog))
                 
-                term_ascii = term.replace("i", "i").upper() 
-                term_tr = term.replace("i", "İ").replace("ı", "I").upper()
+                # Derece öğrencileri için istisna
+                if ranking < 5000:
+                    if prog.ranking < ranking: surprise.append(self.serialize_program(prog))
+                    else: ideal.append(self.serialize_program(prog))
 
-                city_query |= Q(university__city__icontains=term_ascii)
-                city_query |= Q(university__city__icontains=term_tr)
-                city_query |= Q(university__city__icontains=term_normalized)
+            print(f"✅ SONUÇ: {len(surprise)} Sürpriz, {len(ideal)} İdeal, {len(safe)} Güvenli")
 
-            programs = programs.filter(city_query)
+            return Response({
+                "surprise_choices": surprise[:20],
+                "ideal_choices": ideal[:20],
+                "safe_choices": safe[:20]
+            })
 
-        if dept_filter and len(dept_filter) > 0:
-            dept_query = Q()
-            for dept in dept_filter:
-                d_term = str(dept).strip()
-                if not d_term: continue
-                dept_query |= Q(name__icontains=d_term)
-                if 'i' in d_term:
-                    dept_query |= Q(name__icontains=d_term.replace('i', 'İ'))
-                    dept_query |= Q(name__icontains=d_term.replace('i', 'İ').upper())
-            programs = programs.filter(dept_query)
-
-        # --- 3. KATEGORİZASYON ---
-        serialized_data = ProgramSuggestionSerializer(programs, many=True).data
-        
-        surprise = []
-        ideal = []
-        safe = []
-
-        for item in serialized_data:
-            prog_rank = item['ranking']
-            if not prog_rank: continue
+        except Exception as e:
+            print(f"❌ HATA OLUŞTU: {str(e)}")
+            return Response({"error": str(e)}, status=500)
             
-            # Utils üzerinden hesapla
-            category = calculate_probability(ranking, prog_rank)
-            
-            if category == "Surprise":
-                surprise.append(item)
-            elif category == "Safe":
-                safe.append(item)
-            elif category == "Ideal":
-                ideal.append(item)
-
-        # Return ifadesi BURADA, 'def post' hizasında (içeride) olmalı.
-        return Response({
-            "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:50],
-            "ideal_choices": sorted(ideal, key=lambda x: x['ranking'])[:50],
-            "safe_choices": sorted(safe, key=lambda x: x['ranking'])[:50]
-        })
 class FilterView(views.APIView):
     permission_classes = [AllowAny]
 
