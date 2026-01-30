@@ -195,7 +195,7 @@ class Department(models.Model):
     quota = models.IntegerField(null=True, blank=True, verbose_name="Genel Kontenjan")
     school_rank_quota = models.IntegerField(null=True, blank=True, verbose_name="Okul 1. Kontenjanı")
     base_score = models.FloatField(null=True, blank=True, verbose_name="Taban Puan (2024)")
-    ranking = models.IntegerField(null=True, blank=True, verbose_name="Başarı Sıralaması (2024)")
+    ranking = models.IntegerField(..., verbose_name="Başarı Sıralaması (2025 Tahmini)")
     special_conditions = models.TextField(blank=True, verbose_name="Özel Koşullar")
     accreditation = models.CharField(max_length=100, blank=True, verbose_name="Akreditasyon")
 

@@ -6,14 +6,18 @@ from django.conf import settings
 from django.utils.text import slugify
 
 class Command(BaseCommand):
-    help = 'Load 2025 ÖSYM Data from osym_data.csv (Turbo/Bulk Mode)'
+    help = 'Load 2025 ÖSYM Data (Safe Update Mode - Preserves Logos)'
 
     def handle(self, *args, **kwargs):
         file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
         
-        self.stdout.write(self.style.WARNING("⚠️ Eski veriler temizleniyor (Sıfır Kurulum)..."))
-        Department.objects.all().delete()
-        University.objects.all().delete()
+        # --- KRİTİK DEĞİŞİKLİK: ARTIK ÜNİVERSİTELERİ SİLMİYORUZ! ---
+        # University.objects.all().delete()  <-- BU SATIR TARİHE GÖMÜLDÜ.
+        # Sadece Bölümleri temizliyoruz ki puanlar güncellensin.
+        # (Üniversite sabit kalır, içindeki bölümler her yıl değişir)
+        
+        self.stdout.write(self.style.WARNING("⚠️ Bölümler güncelleniyor (Üniversite demirbaşları korunacak)..."))
+        Department.objects.all().delete() # Akademik veriyi tazele, ama çatıyı (Üni) yıkma.
 
         CITY_MAPPING = {
             "ADANA": "ADANA", "ADIYAMAN": "ADIYAMAN", "AFYON": "AFYONKARAHISAR", "AĞRI": "AGRI",
@@ -44,16 +48,20 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Dosya bulunamadı: {file_path}"))
             return
 
-        # 'errors=replace' ile bozuk karakterleri yoksayıyoruz (Encoding hatasını önler)
         with open(file_path, 'r', encoding='utf-8-sig', errors='replace') as f:
             reader = csv.reader(f, delimiter=';')
             next(reader, None) 
             next(reader, None)
 
-            # --- OPTİMİZASYON: ÜNİVERSİTE ÖNBELLEĞİ ---
-            # Her satırda DB'ye sormamak için hafızada tutuyoruz
-            university_cache = {} 
-            departments_to_create = [] # Toplu kayıt listesi
+            # Önbellek: Veritabanını yormamak için mevcut üniversiteleri hafızaya alalım
+            # Artık name -> object eşleşmesi yapıyoruz
+            university_cache = {}
+            
+            # Veritabanındaki tüm üniversiteleri çekip cache'e atalım
+            for uni in University.objects.all():
+                university_cache[uni.name] = uni
+
+            departments_to_create = [] 
 
             count = 0
             for row in reader:
@@ -71,8 +79,12 @@ class Command(BaseCommand):
 
                     if not prog_code or not uni_name: continue
 
-                    # 1. Üniversite İşlemi (Cache Kontrolü)
-                    if uni_name not in university_cache:
+                    # 1. Üniversite İşlemi (GÜVENLİ MOD)
+                    if uni_name in university_cache:
+                        # Zaten var! Dokunma, olduğu gibi kullan.
+                        university = university_cache[uni_name]
+                    else:
+                        # Yoksa oluştur (Yeni açılan üniversite vs.)
                         # Şehir Bulma
                         city = "ISTANBUL"
                         uni_upper = uni_name.upper()
@@ -97,22 +109,17 @@ class Command(BaseCommand):
                         elif 'KIBRIS' in uni_type_raw.upper(): uni_type = 'KIBRIS'
                         elif 'YABANCI' in uni_type_raw.upper(): uni_type = 'YABANCI'
 
-                        # DB'ye Yaz (Sadece Üni için tek tek yazılır, sayısı azdır)
                         uni_slug = slugify(uni_name)
-                        university, _ = University.objects.get_or_create(
+                        university = University.objects.create(
                             name=uni_name,
-                            defaults={
-                                'slug': uni_slug,
-                                'city': city, 
-                                'uni_type': uni_type
-                            }
+                            slug=uni_slug,
+                            city=city, 
+                            uni_type=uni_type
                         )
+                        # Cache'e ekle ki sonraki satırda tekrar oluşturmasın
                         university_cache[uni_name] = university
-                    
-                    # Cache'den al
-                    university = university_cache[uni_name]
 
-                    # 2. Veri Dönüşümleri
+                    # 2. Bölüm Verisi (Bu her zaman taze olacak)
                     try: quota = int(quota_str)
                     except: quota = 0
                     
@@ -127,7 +134,6 @@ class Command(BaseCommand):
                         ranking = int((560 - min_score) * 2000) 
                         if ranking < 1: ranking = 1
 
-                    # 3. LİSTEYE EKLE (DB'ye Yazma!)
                     departments_to_create.append(
                         Department(
                             university=university,
@@ -144,10 +150,9 @@ class Command(BaseCommand):
                 except Exception as e:
                     continue
 
-            # 4. TOPLU KAYIT (BULK CREATE) - İŞTE HIZ BURADA
+            # 3. TOPLU KAYIT
             if departments_to_create:
-                self.stdout.write("Veritabanına toplu yazılıyor (Bu işlem hızlı sürecek)...")
-                # 1000'erli paketler halinde kaydet
+                self.stdout.write("Bölümler güncelleniyor...")
                 Department.objects.bulk_create(departments_to_create, batch_size=1000)
 
-        self.stdout.write(self.style.SUCCESS(f"✅ İŞLEM TAMAM: {count} bölüm şimşek hızında yüklendi!"))
+        self.stdout.write(self.style.SUCCESS(f"✅ GÜNCELLEME TAMAM: {count} bölüm yüklendi. Üniversite logolarına DOKUNULMADI."))
