@@ -185,7 +185,7 @@ class Department(models.Model):
     ]
     
     university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='departments', verbose_name="Üniversite")
-    program_code = models.CharField(max_length=20, unique=True, verbose_name="Program Kodu (YÖK ID)")
+    program_code = models.CharField(max_length=20, unique=True, null=True, blank=True, verbose_name="Program Kodu (YÖK ID)", help_text="ÖSYM Program Kodu (Örn: 100110015)")
     name = models.CharField(max_length=200, verbose_name="Bölüm Adı")
     faculty = models.CharField(max_length=200, blank=True, verbose_name="Fakülte")
     language = models.CharField(max_length=50, default="Türkçe", verbose_name="Eğitim Dili")

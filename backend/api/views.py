@@ -43,25 +43,22 @@ logger = logging.getLogger(__name__)
 
 # --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
 class SystemWarmupView(views.APIView):
-    """
-    Render Shell erişimi olmadığı için, HTTP üzerinden
-    CSV veri yükleme komutunu tetikler.
-    Sadece Admin erişebilir (GÜVENLİK).
-    """
-    permission_classes = [AllowAny] # Acil durum için açtık, Prod'da IsAdminUser olmalı
+    permission_classes = [AllowAny] 
 
     def get(self, request):
         try:
-            # Komutu çalıştır: python manage.py load_tuma_data memnuniyet.csv
-            # --reset flag'i de eklenebilir ama tehlikeli olabilir.
-            file_path = 'memnuniyet.csv' # Root'da olduğu varsayılıyor
+            # 1. Aşama: İskeleti Kur (ÖSYM)
+            call_command('load_osym_data')
             
-            # stdout yakalamak zor olabilir, o yüzden basitçe çalıştırıyoruz.
-            call_command('load_tuma_data', file_path)
+            # 2. Aşama: Ruhu Üfle (TÜMA - Opsiyonel, dosya varsa çalışır)
+            # TÜMA dosyasının proje ana dizininde 'memnuniyet.csv' adıyla olduğunu varsayıyoruz.
+            # Eğer dosya yoksa hata vermez, sadece çalışmaz.
+            if os.path.exists(os.path.join(settings.BASE_DIR, 'memnuniyet.csv')):
+                call_command('load_tuma_data', 'memnuniyet.csv')
             
             return Response({
                 "status": "success",
-                "message": "Veri yükleme işlemi (load_tuma_data) başarıyla tetiklendi."
+                "message": "Sistem Tamamen Hazır: ÖSYM verileri yüklendi + TÜMA istatistikleri güncellendi."
             })
         except Exception as e:
             logger.error(f"Warmup Error: {e}")
@@ -69,7 +66,7 @@ class SystemWarmupView(views.APIView):
                 "status": "error",
                 "message": str(e)
             }, status=500)
-
+            
 # =============================================================================
 # 1. VIEWSETS (Standart CRUD İşlemleri)
 # =============================================================================
@@ -432,8 +429,15 @@ class TercihMotoruView(views.APIView):
                     dept_query |= Q(name__icontains=d_term.replace('i', 'İ').upper())
             programs = programs.filter(dept_query)
 
+from .utils import calculate_probability # YENİ IMPORT
+
+# ... (Existing imports)
+
+# --- TERCİH MOTORU ---
+class TercihMotoruView(views.APIView):
+    # ... (Existing code)
+
         # --- 3. KATEGORİZASYON ---
-        # FIX: Doğru serializer kullanıldı
         serialized_data = ProgramSuggestionSerializer(programs, many=True).data
         
         surprise = []
@@ -444,21 +448,16 @@ class TercihMotoruView(views.APIView):
             prog_rank = item['ranking']
             if not prog_rank: continue
             
-            # Segment A (Derece) için özel dağılım:
-            if ranking < 5000:
-                ideal_threshold = max(ranking * 1.5, 3000)
-                if prog_rank <= ideal_threshold: 
-                    ideal.append(item)
-                else:
-                    safe.append(item)
-            else:
-                # Standart Kullanıcılar İçin
-                if prog_rank < ranking * 0.95: # Sürpriz
-                    surprise.append(item)
-                elif prog_rank > ranking * 1.15: # Güvenli
-                    safe.append(item)
-                else: # İdeal
-                    ideal.append(item)
+            # Yeni Mantık: Utils üzerinden hesapla
+            category = calculate_probability(ranking, prog_rank)
+            
+            if category == "Surprise":
+                surprise.append(item)
+            elif category == "Safe":
+                safe.append(item)
+            elif category == "Ideal":
+                ideal.append(item)
+            # Dream kategorisi şimdilik gösterilmiyor veya Surprise içine atılabilir.
 
         return Response({
             "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:50],
