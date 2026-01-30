@@ -355,6 +355,8 @@ class TrackActivityView(views.APIView):
 
 # api/views.py dosyasındaki TercihMotoruView sınıfını bununla değiştirin:
 
+# api/views.py dosyasındaki TercihMotoruView sınıfını bununla değiştirin:
+
 class TercihMotoruView(APIView):
     """
     Segmentli Algoritma + Gelişmiş Türkçe Karakter Desteği + Debug Logları
@@ -485,7 +487,7 @@ class TercihMotoruView(APIView):
                     # Basit bir replace zinciri ile yaygın Türkçe karakterleri büyütelim
                     term_upper = term.upper().replace("i", "İ").replace("ı", "I") 
                     # Python'un upper'ı "i"yi "I" yapar, o yüzden manuel düzeltme gerekebilir ama
-                    # Veritabanındaki veri "TÜRKÇE" ise icontains bazen yetmeyebilir.
+                    # Veritabanındaki veri "TÜRKÇE" ise icontains genelde yetmeyebilir.
                     
                     # C. Joker Karakterli Arama (En Garantisi)
                     # "Türkçe" kelimesindeki ü, ç gibi harflerin yerine ne gelirse gelsin bulmaya çalışalım.
@@ -543,8 +545,7 @@ class TercihMotoruView(APIView):
 
         except Exception as e:
             print(f"❌ HATA OLUŞTU: {str(e)}")
-            return Response({"error": str(e)}, status=500)
-            
+            return Response({"error": str(e)}, status=500)            
 class FilterView(views.APIView):
     permission_classes = [AllowAny]
 
