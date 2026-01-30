@@ -30,15 +30,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1:3000',
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    'https://kampus-backend-4wes.onrender.com',
-    'https://kampus-yolunda.vercel.app',
-    'https://kampusyolunda.com',
-    'https://www.kampusyolunda.com',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
-
+CORS_ALLOW_ALL_ORIGINS = True # PROD İÇİN: Frontend heryerden erişebilsin
 CORS_ALLOW_CREDENTIALS = True
 
 # --- UYGULAMA TANIMLARI ---
@@ -67,7 +59,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # EN ÜSTTE OLMALI
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',

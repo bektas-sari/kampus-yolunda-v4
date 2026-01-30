@@ -30,6 +30,9 @@ urlpatterns = [
     # Router URL'leri
     path('', include(router.urls)),
 
+    # SYSTEM WARMUP (Acil Durum Data Loader)
+    path('admin/system-warmup/', views.SystemWarmupView.as_view(), name='system_warmup'),
+
     # Kullanıcı & Auth
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/me/', views.ManageUserView.as_view(), name='me'),

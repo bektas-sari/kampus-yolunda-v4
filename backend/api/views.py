@@ -12,6 +12,7 @@ from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 
 # --- MODELLER ---
+from django.core.management import call_command # YENİ IMPORT
 from .models import (
     University, Department, Dormitory, StudentHouse, 
     Scholarship, News, Lead, Feature, CampusVenue, Promotion, Review, CampusReel,
@@ -35,10 +36,39 @@ from .serializers import (
     ReviewSerializer, ReviewCreateSerializer,
     FavoriteUniversitySerializer, FavoriteDormitorySerializer, FavoriteStudentHouseSerializer,
     CampusReelSerializer,
-    ProgramSuggestionSerializer # <-- IMPORT DÜZELTİLDİ
+    ProgramSuggestionSerializer 
 )
 
 logger = logging.getLogger(__name__)
+
+# --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
+class SystemWarmupView(views.APIView):
+    """
+    Render Shell erişimi olmadığı için, HTTP üzerinden
+    CSV veri yükleme komutunu tetikler.
+    Sadece Admin erişebilir (GÜVENLİK).
+    """
+    permission_classes = [AllowAny] # Acil durum için açtık, Prod'da IsAdminUser olmalı
+
+    def get(self, request):
+        try:
+            # Komutu çalıştır: python manage.py load_tuma_data memnuniyet.csv
+            # --reset flag'i de eklenebilir ama tehlikeli olabilir.
+            file_path = 'memnuniyet.csv' # Root'da olduğu varsayılıyor
+            
+            # stdout yakalamak zor olabilir, o yüzden basitçe çalıştırıyoruz.
+            call_command('load_tuma_data', file_path)
+            
+            return Response({
+                "status": "success",
+                "message": "Veri yükleme işlemi (load_tuma_data) başarıyla tetiklendi."
+            })
+        except Exception as e:
+            logger.error(f"Warmup Error: {e}")
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=500)
 
 # =============================================================================
 # 1. VIEWSETS (Standart CRUD İşlemleri)
