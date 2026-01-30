@@ -296,43 +296,62 @@ function UniversityDetailContent() {
                     {activeTab === 'genel' && (
                         <div className="space-y-8 animate-in fade-in duration-500">
 
-                            {/* --- İSTATİSTİK KUTULARI (TÜMA GÜNCELLEMESİ) --- */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                                {/* Rektör Kutusu (Varsa) */}
-                                {uni.rector && (
-                                    <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center col-span-2 md:col-span-3 lg:col-span-2 flex flex-col justify-center">
-                                        <UserCheck className="mx-auto text-[#00ff88] mb-1" size={20} />
-                                        <div className="text-sm font-bold text-white line-clamp-1">{uni.rector}</div>
-                                        <div className="text-[10px] text-gray-500 uppercase">Rektör</div>
+                            {/* --- İSTATİSTİK KUTULARI (TÜMA) --- */}
+                            <div className="relative mt-4"> {/* mt-4 ekledik ki üstten ayrılsın */}
+
+                                {/* INFO TOOLTIP ALANI (Görünür Mod) */}
+                                <div className="flex justify-end mb-2 pr-2"> {/* pr-2 ile hafif içeri aldık */}
+                                    <div className="group relative flex items-center gap-2 cursor-help z-30 bg-[#111] border border-[#00ff88]/30 px-3 py-1.5 rounded-full hover:bg-[#00ff88]/10 transition-all">
+                                        <Info size={16} className="text-[#00ff88]" /> {/* İkon artık Neon Yeşil */}
+                                        <span className="text-[10px] text-[#00ff88] font-bold uppercase tracking-wider">Veri Kaynağı</span>
+
+                                        {/* Tooltip Baloncuğu */}
+                                        <div className="absolute bottom-full right-0 mb-3 w-64 bg-[#1a1a1a] border border-[#00ff88]/50 text-gray-200 text-xs p-4 rounded-xl shadow-[0_0_20px_rgba(0,255,136,0.1)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 text-center pointer-events-none z-40">
+                                            <p className="mb-1">📊 <strong>Güvenilir Veri</strong></p>
+                                            Bu puanlar bağımsız araştırma kuruluşu <strong className="text-[#00ff88]">UniAr'ın 2025 Raporu</strong> esas alınarak hazırlanmıştır.
+                                            {/* Küçük ok işareti */}
+                                            <div className="absolute top-full right-4 -mt-1 border-4 border-transparent border-t-[#00ff88]/50"></div>
+                                        </div>
                                     </div>
-                                )}
-
-                                {/* Akademik Puan */}
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
-                                    <GraduationCap className="mx-auto text-blue-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
-                                    <div className="text-lg font-bold text-white">{stats.academic_score}/100</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Akademik İlgi</div>
                                 </div>
 
-                                {/* Kampüs Puanı */}
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
-                                    <Trees className="mx-auto text-green-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
-                                    <div className="text-lg font-bold text-white">{stats.campus_score}/100</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Kampüs Ortamı</div>
-                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                                    {/* Rektör Kutusu (Varsa) */}
+                                    {uni.rector && (
+                                        <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center col-span-2 md:col-span-3 lg:col-span-2 flex flex-col justify-center">
+                                            <UserCheck className="mx-auto text-[#00ff88] mb-1" size={20} />
+                                            <div className="text-sm font-bold text-white line-clamp-1">{uni.rector}</div>
+                                            <div className="text-[10px] text-gray-500 uppercase">Rektör</div>
+                                        </div>
+                                    )}
 
-                                {/* Kariyer Puanı */}
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
-                                    <Briefcase className="mx-auto text-purple-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
-                                    <div className="text-lg font-bold text-white">{stats.career_score}/100</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Kariyer Desteği</div>
-                                </div>
+                                    {/* Akademik Puan */}
+                                    <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                        <GraduationCap className="mx-auto text-blue-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                        <div className="text-lg font-bold text-white">{stats.academic_score}/100</div>
+                                        <div className="text-[10px] text-gray-500 uppercase">Akademik İlgi</div>
+                                    </div>
 
-                                {/* Şehir Puanı */}
-                                <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
-                                    <Building2 className="mx-auto text-orange-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
-                                    <div className="text-lg font-bold text-white">{stats.city_score}/100</div>
-                                    <div className="text-[10px] text-gray-500 uppercase">Şehir Cazibesi</div>
+                                    {/* Kampüs Puanı */}
+                                    <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                        <Trees className="mx-auto text-green-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                        <div className="text-lg font-bold text-white">{stats.campus_score}/100</div>
+                                        <div className="text-[10px] text-gray-500 uppercase">Kampüs Ortamı</div>
+                                    </div>
+
+                                    {/* Kariyer Puanı */}
+                                    <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                        <Briefcase className="mx-auto text-purple-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                        <div className="text-lg font-bold text-white">{stats.career_score}/100</div>
+                                        <div className="text-[10px] text-gray-500 uppercase">Kariyer Desteği</div>
+                                    </div>
+
+                                    {/* Şehir Puanı */}
+                                    <div className="bg-[#111] p-3 rounded-xl border border-white/10 text-center group hover:border-[#00ff88]/30 transition-colors">
+                                        <Building2 className="mx-auto text-orange-400 mb-1 group-hover:scale-110 transition-transform" size={20} />
+                                        <div className="text-lg font-bold text-white">{stats.city_score}/100</div>
+                                        <div className="text-[10px] text-gray-500 uppercase">Şehir Cazibesi</div>
+                                    </div>
                                 </div>
                             </div>
                             {/* --- İSTATİSTİK SONU --- */}
@@ -805,5 +824,3 @@ export default function UniversityDetailPage() {
         </Suspense>
     );
 }
-
-// kontrol
