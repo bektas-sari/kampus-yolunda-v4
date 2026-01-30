@@ -46,6 +46,16 @@ interface AnalysisResult {
     safe_choices: Program[];
 }
 
+// --- PUAN TÜRÜ SEÇENEKLERİ (Tercüman Katmanı) ---
+// Backend'in anladığı dil (value) ile kullanıcının gördüğü dil (label) burada eşleşiyor.
+const SCORE_OPTIONS = [
+    { label: "SAYISAL (SAY)", value: "SAY" },
+    { label: "EŞİT AĞIRLIK (EA)", value: "EA" },
+    { label: "SÖZEL (SÖZ)", value: "SOZ" },
+    { label: "DİL (DİL)", value: "DIL" },
+    { label: "TYT (2 Yıllık)", value: "TYT" } // Backend modelinde var, eklendi.
+];
+
 // --- AUTOCOMPLETE COMPONENT ---
 interface AutocompleteProps {
     label: string;
@@ -198,7 +208,7 @@ function TercihMotoruContent() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     student_ranking: parseInt(rnk),
-                    score_type: sType,
+                    score_type: sType, // Burası artık "SOZ", "SAY" gibi temiz kodlar gönderiyor
                     city_filter: city ? [city] : [],
                     department_filter: dept ? [dept] : [],
                 }),
@@ -390,10 +400,12 @@ function TercihMotoruContent() {
                         <div className="space-y-1">
                             <label className="text-[10px] font-bold text-gray-500 uppercase">Puan Türü</label>
                             <select value={scoreType} onChange={(e) => setScoreType(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-3 text-sm text-white focus:border-blue-500 outline-none appearance-none transition-colors">
-                                <option value="SAY">SAYISAL (SAY)</option>
-                                <option value="EA">EŞİT AĞIRLIK (EA)</option>
-                                <option value="SOZ">SÖZEL (SÖZ)</option>
-                                <option value="DIL">DİL (DİL)</option>
+                                {/* DÜZELTME: Seçenekleri temiz ve doğru value'larla map ediyoruz */}
+                                {SCORE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <AutocompleteInput label="Şehir" placeholder="İstanbul..." value={cityFilter} onChange={setCityFilter} options={availableCities} />
