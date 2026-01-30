@@ -120,34 +120,73 @@ class Command(BaseCommand):
                         university_cache[uni_name] = university
 
                     # 2. Bölüm Verisi (Bu her zaman taze olacak)
-                    try: quota = int(quota_str)
-                    except: quota = 0
-                    
-                    try: 
-                        min_score = float(min_score_str.replace(',', '.'))
-                        if min_score < 100: min_score = 0
-                    except: min_score = 0.0
+                    # Puan Türü Normalizasyonu
+                    raw_score_type = row[5].strip()
+                    score_mapping = {
+                        "SÖZ": "SOZ",
+                        "DİL": "DIL",
+                        "SAY": "SAY",
+                        "EA": "EA",
+                        "TYT": "TYT"
+                    }
+                    score_type = score_mapping.get(raw_score_type, raw_score_type) # Bilinmeyen varsa olduğu gibi bırak
 
-                    # Rank Tahmini
-                    ranking = 0
-                    if min_score > 100:
-                        ranking = int((560 - min_score) * 2000) 
+                # 2. Bölüm Verisi
+                # Puan Türü Normalizasyonu
+                raw_score_type = row[5].strip()
+                score_mapping = {
+                    "SÖZ": "SOZ",
+                    "DİL": "DIL",
+                    "SAY": "SAY",
+                    "EA": "EA",
+                    "TYT": "TYT"
+                }
+                score_type = score_mapping.get(raw_score_type, raw_score_type)
+
+                try: 
+                    quota = int(row[6]) if row[6].isdigit() else 0
+                except: quota = 0
+                
+                try: 
+                    # Index 8: En Küçük Puan (Genel Kontenjan)
+                    score_str = row[8].replace(',', '.')
+                    if score_str == '--' or not score_str:
+                         min_score = 0.0
+                    else:
+                         min_score = float(score_str)
+                except: min_score = 0.0
+
+                # Rank Tahmini (CSV'de olmayan veriyi simüle et)
+                ranking = 0
+                if min_score > 150:
+                    try:
+                        # Basit bir ters orantı (Tamamen tahmini)
+                        # 560 puan -> 1. sıra
+                        # 300 puan -> 300.000. sıra vb.
+                        diff = 560 - min_score
+                        ranking = int(diff * 2000)
                         if ranking < 1: ranking = 1
-
-                    departments_to_create.append(
-                        Department(
-                            university=university,
-                            program_code=prog_code,
-                            name=dept_name,
-                            faculty=faculty,
-                            score_type=score_type,
-                            quota=quota,
-                            base_score=min_score,
-                            ranking=ranking
-                        )
+                    except: ranking = 999999
+                
+                # Department Nesnesini Hazırla
+                departments_to_create.append(
+                    Department(
+                        university=university,
+                        program_code=prog_code,
+                        name=dept_name,
+                        faculty=faculty,
+                        score_type=score_type,
+                        quota=quota,
+                        base_score=min_score,
+                        ranking=ranking,
+                        # create_load_osym_data.py'daki modelde 'city' alanı Department'ta field değil property olabilir
+                        # Ancak model.py'yi kontrol ettiğimde Department modelinde city yok, University'de var.
+                        # utils.py serialize ederken university.city kullanıyor. Sorun yok.
                     )
-                    count += 1
+                )
+                count += 1
                 except Exception as e:
+                    # self.stdout.write(self.style.ERROR(f"Hata oluştu: {e} - Satır: {row}")) # For debugging
                     continue
 
             # 3. TOPLU KAYIT
