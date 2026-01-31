@@ -1,72 +1,99 @@
 import csv
 import os
+import difflib
 from django.core.management.base import BaseCommand
 from api.models import University, UniversityStats
-from django.utils.text import slugify
+from django.conf import settings
 
 class Command(BaseCommand):
-    help = 'TÜMA verilerini mevcut üniversitelere ENJEKTE eder (Silme Yapmaz)'
+    help = 'TÜMA (Memnuniyet) Verilerini Akıllı Eşleştirme ile Yükle'
 
-    def add_arguments(self, parser):
-        parser.add_argument('file_path', type=str, help='CSV dosyasının yolu')
+    def normalize_name(self, text):
+        """Türkçe karakterleri ve fazlalıkları temizler"""
+        text = text.lower().replace('ü', 'u').replace('ö', 'o').replace('ı', 'i').replace('ş', 's').replace('ç', 'c').replace('ğ', 'g')
+        text = text.replace('universitesi', '').replace('univ', '').replace('yuksekteknoloji', 'iyte')
+        return text.strip()
 
-    def handle(self, *args, **options):
-        file_path = options['file_path']
-
+    def handle(self, *args, **kwargs):
+        file_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
+        
         if not os.path.exists(file_path):
-            self.stdout.write(self.style.ERROR(f'Dosya bulunamadı: {file_path}'))
+            self.stdout.write(self.style.ERROR(f"Dosya bulunamadı: {file_path}"))
             return
 
-        self.stdout.write(self.style.WARNING(f'TÜMA Verileri Enjekte Ediliyor...'))
+        self.stdout.write("🔍 TÜMA Verileri Yükleniyor ve Eşleştiriliyor...")
 
-        try:
-            with open(file_path, 'r', encoding='utf-8') as csvfile:
-                reader = csv.DictReader(csvfile)
-                updated_count = 0
+        # Veritabanındaki Üniversiteleri Hafızaya Al
+        db_universities = list(University.objects.all())
+        uni_map = {self.normalize_name(u.name): u for u in db_universities}
+        
+        matched_count = 0
+        failed_count = 0
+
+        with open(file_path, 'r', encoding='utf-8-sig', errors='replace') as f:
+            reader = csv.DictReader(f, delimiter=';') # Noktalı virgül varsayımı
+            
+            # Sütun İsimlerini Kontrol Et (Esneklik için)
+            headers = reader.fieldnames
+            col_uni = next((h for h in headers if "Üniversite" in h or "Universite" in h), None)
+            
+            # Puan Sütunlarını Tahmin Et
+            col_academic = next((h for h in headers if "Akademik" in h), None)
+            col_campus = next((h for h in headers if "Kampüs" in h or "Yerleşke" in h), None)
+            col_social = next((h for h in headers if "Sosyal" in h), None)
+            col_career = next((h for h in headers if "Kariyer" in h), None)
+            col_tech = next((h for h in headers if "Tekno" in h or "İmkan" in h), None)
+            
+            if not col_uni:
+                self.stdout.write(self.style.ERROR("❌ CSV'de 'Üniversite' sütunu bulunamadı! Başlıkları kontrol edin."))
+                return
+
+            for row in reader:
+                raw_name = row.get(col_uni, "").strip()
+                if not raw_name: continue
+
+                norm_name = self.normalize_name(raw_name)
                 
-                for row in reader:
+                # 1. Tam Eşleşme Dene
+                target_uni = uni_map.get(norm_name)
+
+                # 2. Benzerlik Araması (Fuzzy Match)
+                if not target_uni:
+                    # Veritabanındaki normalize isimler arasında en benzerini bul
+                    closest_matches = difflib.get_close_matches(norm_name, uni_map.keys(), n=1, cutoff=0.6)
+                    if closest_matches:
+                        target_uni = uni_map[closest_matches[0]]
+                        # self.stdout.write(f"🔗 Eşleşti: {raw_name} -> {target_uni.name}")
+
+                if target_uni:
                     try:
-                        uni_name = row['Üniversite'].strip()
-                        
-                        # Üniversiteyi Bul (Basit Eşleşme)
-                        uni = University.objects.filter(name__iexact=uni_name).first()
-                        
-                        if not uni:
-                            # Bulamazsa "Üniversitesi" ekleyip/çıkarıp deneyelim
-                            if "Üniversitesi" in uni_name:
-                                short_name = uni_name.replace("Üniversitesi", "").strip()
-                                uni = University.objects.filter(name__icontains=short_name).first()
-                            
-                        if not uni:
-                            continue
+                        # Puanları Al (Yoksa 50 varsay)
+                        # CSV'deki puanlar bazen "A+", "A" gibi harf olabilir, onları sayıya çevirmek gerekebilir.
+                        # Biz şimdilik sayısal (0-100 veya 0-500) olduğunu varsayıyoruz.
+                        def get_score(col):
+                            val = row.get(col, "50")
+                            try:
+                                return int(float(val.replace(',', '.')))
+                            except:
+                                return 50
 
-                        # Puanları Temizle
-                        def clean_score(val):
-                            if not val: return 50
-                            return int(val.split('(')[0].strip())
-
-                        academic = clean_score(row.get('Öğr.Den. Puan (Sıra)', 0))
-                        campus = clean_score(row.get('Yerleşke Puan (Sıra)', 0))
-                        
-                        # İstatistikleri Güncelle (ASLA SİLME YOK)
-                        UniversityStats.objects.update_or_create(
-                            university=uni,
+                        stats, created = UniversityStats.objects.update_or_create(
+                            university=target_uni,
                             defaults={
-                                'academic_score': academic,
-                                'campus_score': campus,
-                                'social_score': clean_score(row.get('Yönetim Puan (Sıra)', 0)),
-                                'career_score': clean_score(row.get('Kariyer Puan (Sıra)', 0)),
-                                'tech_score': clean_score(row.get('Akad.Des. Puan (Sıra)', 0)),
-                                'city_score': campus, 
-                                'source': 'TÜMA 2025'
+                                'academic_score': get_score(col_academic),
+                                'campus_score': get_score(col_campus),
+                                'social_score': get_score(col_social),
+                                'career_score': get_score(col_career),
+                                'tech_score': get_score(col_tech),
+                                'city_score': 70, # Şehir puanı TÜMA'da yoksa varsayılan
+                                'source': 'TÜMA 2024'
                             }
                         )
-                        updated_count += 1
-
+                        matched_count += 1
                     except Exception as e:
-                        continue
+                        print(f"Hata ({raw_name}): {e}")
+                else:
+                    failed_count += 1
+                    # self.stdout.write(f"⚠️ Eşleşmedi: {raw_name}")
 
-            self.stdout.write(self.style.SUCCESS(f'\n🚀 BAŞARILI! {updated_count} üniversitenin istatistikleri güncellendi.'))
-
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Genel Hata: {e}'))
+        self.stdout.write(self.style.SUCCESS(f"✅ İŞLEM TAMAM: {matched_count} üniversite güncellendi. ({failed_count} kayıp)"))
