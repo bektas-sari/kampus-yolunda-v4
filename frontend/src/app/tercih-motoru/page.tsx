@@ -1,443 +1,456 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { MapPin, ChevronRight, TrendingUp, Anchor, AlertCircle, Loader2, Sparkles, MessageSquareQuote, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    Trophy, Shield, Zap, X, ChevronRight, Building2, MapPin, BookOpen
+} from "lucide-react";
+
+// Kendi oluşturduğumuz Radar bileşeni
 import UniversityRadarChart from "@/components/UniversityRadarChart";
 
-// --- TİP TANIMLAMALARI ---
-interface University {
-    name: string;
-    slug: string;
-    city: string;
-    logo?: string;
-    uni_type?: string;
+// --- DÜZELTME 1: TİPLERİ ZORUNLU YAPTIK (Soru işaretleri kalktı) ---
+interface UniversityStats {
+    academic_score: number;
+    campus_score: number;
+    city_score: number;
+    career_score: number; // '?' kaldırıldı
+    social_score: number; // '?' kaldırıldı
+    tech_score: number;   // '?' kaldırıldı
 }
 
 interface Program {
     id: number;
     name: string;
     program_code: string;
-    faculty: string;
-    score_type: string;
-    quota: number;
-    ranking: number | null;
-    points: number | null;
-    education_type: string;
-    university: University;
     university_name: string;
-    university_slug: string;
-    university_city?: string;
+    university_city: string;
+    university_type: string;
     university_logo: string | null;
-    university_stats?: {
-        academic_score: number;
-        campus_score: number;
-        social_score: number;
-        career_score: number;
-        tech_score: number;
-        city_score: number;
-    };
+    university_stats: UniversityStats | null;
+    ranking: number;
+    score: number;
+    quota: number;
+    scholarship_rate: number;
+    is_english: boolean;
+    reasons: string[];
 }
 
-interface AnalysisResult {
+interface ResultsData {
     surprise_choices: Program[];
     ideal_choices: Program[];
     safe_choices: Program[];
 }
 
-// --- PUAN TÜRÜ SEÇENEKLERİ (Tercüman Katmanı) ---
-// Backend'in anladığı dil (value) ile kullanıcının gördüğü dil (label) burada eşleşiyor.
-const SCORE_OPTIONS = [
-    { label: "SAYISAL (SAY)", value: "SAY" },
-    { label: "EŞİT AĞIRLIK (EA)", value: "EA" },
-    { label: "SÖZEL (SÖZ)", value: "SOZ" },
-    { label: "DİL (DİL)", value: "DIL" },
-    { label: "TYT (2 Yıllık)", value: "TYT" } // Backend modelinde var, eklendi.
-];
+// --- ANA SAYFA BİLEŞENİ ---
+export default function TercihMotoruPage() {
+    const [formData, setFormData] = useState({
+        ranking: "",
+        city: "",
+        department: "",
+        scoreType: "SAY"
+    });
 
-// --- AUTOCOMPLETE COMPONENT ---
-interface AutocompleteProps {
-    label: string;
-    placeholder: string;
-    value: string;
-    onChange: (val: string) => void;
-    options: string[];
-}
-
-const AutocompleteInput = ({ label, placeholder, value, onChange, options }: AutocompleteProps) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [filteredOptions, setFilteredOptions] = useState<string[]>([]);
-    const wrapperRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!value) {
-            setFilteredOptions([]);
-            return;
-        }
-        const search = value.toLocaleLowerCase('tr');
-        const matches = options.filter(item =>
-            item.toLocaleLowerCase('tr').includes(search)
-        );
-        setFilteredOptions(matches.slice(0, 10));
-    }, [value, options]);
-
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const handleSelect = (option: string) => {
-        onChange(option);
-        setIsOpen(false);
-    };
-
-    return (
-        <div className="space-y-1 relative" ref={wrapperRef}>
-            <label className="text-[10px] font-bold text-gray-500 uppercase">{label}</label>
-            <div className="relative">
-                <input
-                    type="text"
-                    placeholder={placeholder}
-                    value={value}
-                    onChange={(e) => {
-                        onChange(e.target.value);
-                        setIsOpen(true);
-                    }}
-                    onFocus={() => value && setIsOpen(true)}
-                    className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-3 text-sm text-white focus:border-blue-500 outline-none transition-colors"
-                />
-                {isOpen && filteredOptions.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-[#1a1c2e] border border-white/10 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                        <ul className="py-1">
-                            {filteredOptions.map((option, index) => (
-                                <li
-                                    key={index}
-                                    onClick={() => handleSelect(option)}
-                                    className="px-3 py-2 text-sm text-gray-300 hover:bg-white/10 cursor-pointer transition-colors"
-                                >
-                                    {option}
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// --- ANA İÇERİK BİLEŞENİ (Export Default DEĞİL) ---
-function TercihMotoruContent() {
-    const [loading, setLoading] = useState(false);
-    const [results, setResults] = useState<AnalysisResult | null>(null);
-
-    // Form State
-    const [ranking, setRanking] = useState("");
-    const [scoreType, setScoreType] = useState("SAY");
-    const [cityFilter, setCityFilter] = useState("");
-    const [deptFilter, setDeptFilter] = useState("");
+    // Filtre Listeleri
     const [availableCities, setAvailableCities] = useState<string[]>([]);
     const [availableDepts, setAvailableDepts] = useState<string[]>([]);
 
-    const searchParams = useSearchParams();
-    const router = useRouter();
-    const pathname = usePathname();
+    const [results, setResults] = useState<ResultsData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
 
+    // 1. Sayfa Yüklendiğinde Filtreleri Çek
     useEffect(() => {
         const fetchFilters = async () => {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-                const res = await fetch(`${API_URL}/api/filters/`);
+                const res = await fetch("https://kampus-backend-4wes.onrender.com/api/filters/");
                 if (res.ok) {
                     const data = await res.json();
                     setAvailableCities(data.cities || []);
                     setAvailableDepts(data.departments || []);
                 }
-            } catch (err) { console.error(err); }
+            } catch (error) {
+                console.error("Filtreler yüklenemedi:", error);
+            }
         };
         fetchFilters();
     }, []);
 
-    useEffect(() => {
-        const urlRanking = searchParams.get('ranking');
-        const urlScoreType = searchParams.get('scoreType');
-        const urlCity = searchParams.get('city');
-        const urlDept = searchParams.get('dept');
+    // 2. Arama Fonksiyonu
+    const handleSearch = async () => {
+        if (!formData.ranking) return alert("Lütfen sıralamanızı girin.");
 
-        if (urlRanking) {
-            setRanking(urlRanking);
-            if (urlScoreType) setScoreType(urlScoreType);
-            if (urlCity) setCityFilter(urlCity);
-            if (urlDept) setDeptFilter(urlDept);
-            if (!results) performAnalysis(urlRanking, urlScoreType || 'SAY', urlCity || '', urlDept || '');
-        }
-    }, [searchParams]);
-
-    const calculateProbability = (studentRank: number, deptRank: number | null) => {
-        if (!deptRank || !studentRank || studentRank <= 0) return 0;
-        if (studentRank <= 1000 && deptRank >= studentRank) return 99;
-        let volatility = 0.10;
-        if (studentRank > 50000) volatility = 0.15;
-        if (studentRank > 150000) volatility = 0.20;
-        const gap = (deptRank - studentRank) / studentRank;
-        let probability = 0;
-        if (gap >= 0) {
-            if (gap > volatility) probability = 95 + (gap * 2);
-            else probability = 80 + (gap / volatility) * 15;
-        } else {
-            const riskFactor = Math.abs(gap);
-            if (riskFactor <= volatility) probability = 50 + (gap / volatility) * 40;
-            else probability = 10 * Math.exp(-1 * (riskFactor - volatility) * 5);
-        }
-        return Math.min(Math.max(Math.round(probability), 1), 99);
-    };
-
-    const performAnalysis = async (rnk: string, sType: string, city: string, dept: string) => {
-        if (!rnk) return;
         setLoading(true);
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-            const res = await fetch(`${API_URL}/api/tercih-motoru/`, {
+            const res = await fetch("https://kampus-backend-4wes.onrender.com/api/tercih-motoru/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    student_ranking: parseInt(rnk),
-                    score_type: sType, // Burası artık "SOZ", "SAY" gibi temiz kodlar gönderiyor
-                    city_filter: city ? [city] : [],
-                    department_filter: dept ? [dept] : [],
-                }),
+                    student_ranking: parseInt(formData.ranking),
+                    score_type: formData.scoreType,
+                    city_filter: formData.city ? [formData.city] : [],
+                    department_filter: formData.department ? [formData.department] : []
+                })
             });
-            if (!res.ok) throw new Error("Analiz hatası");
+
             const data = await res.json();
             setResults(data);
-            setTimeout(() => {
-                const resultElement = document.getElementById('results-section');
-                if (resultElement) resultElement.scrollIntoView({ behavior: 'smooth' });
-            }, 100);
-        } catch (error) { console.error(error); } finally { setLoading(false); }
-    };
-
-    const handleAnalyze = async () => {
-        if (!ranking) return;
-        performAnalysis(ranking, scoreType, cityFilter, deptFilter);
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('ranking', ranking);
-        params.set('scoreType', scoreType);
-        if (cityFilter) params.set('city', cityFilter); else params.delete('city');
-        if (deptFilter) params.set('dept', deptFilter); else params.delete('dept');
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    };
-
-    // --- GENİŞLEYEBİLEN KART (EXPANDABLE CARD) ---
-    const ProgramCard = ({ program, type }: { program: Program, type: 'surprise' | 'ideal' | 'safe' }) => {
-        const [isOpen, setIsOpen] = useState(false);
-        const uniName = program.university_name || program.university?.name || "Bilinmeyen Üniversite";
-        const uniCity = program.university_city || program.university?.city || "";
-        const uniSlug = program.university_slug || program.university?.slug || "#";
-        const uniLogo = program.university_logo || program.university?.logo || null;
-        const probability = calculateProbability(parseInt(ranking), program.ranking);
-
-        const styles = {
-            surprise: { border: "border-orange-500/30", bg: "bg-orange-500/5", text: "text-orange-400", label: "Yüksek Hedef", icon: TrendingUp },
-            ideal: { border: "border-blue-500/30", bg: "bg-blue-500/5", text: "text-blue-400", label: "İdeal Tercih", icon: AlertCircle },
-            safe: { border: "border-green-500/30", bg: "bg-green-500/5", text: "text-green-400", label: "Güvenli Liman", icon: Anchor },
-        }[type];
-
-        const Icon = styles.icon;
-
-        return (
-            <div className={`group relative bg-[#0a0a0a] border ${styles.border} rounded-xl overflow-hidden mb-3 transition-all duration-300 ${isOpen ? 'ring-1 ring-white/10 bg-white/[0.02]' : 'hover:bg-white/[0.02]'}`}>
-
-                {/* 1. HEADER - HER ZAMAN GÖRÜNÜR - TIKLANABİLİR */}
-                <div
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="p-5 cursor-pointer flex items-center justify-between gap-4"
-                >
-                    <div className="flex items-center gap-4 overflow-hidden">
-                        {/* Sol İkon / Logo */}
-                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg ${styles.bg} border border-white/5 flex items-center justify-center shrink-0`}>
-                            {program.university_logo ? (
-                                <img src={program.university_logo} alt={uniName} className="w-8 h-8 object-contain" />
-                            ) : (
-                                <span className={`text-xs font-bold ${styles.text}`}>{uniName.substring(0, 2)}</span>
-                            )}
-                        </div>
-
-                        {/* Orta Bilgiler */}
-                        <div className="min-w-0">
-                            <h3 className="text-white font-bold text-sm md:text-base truncate group-hover:text-blue-400 transition-colors">
-                                {program.name}
-                            </h3>
-                            <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                                <span className="truncate max-w-[150px] md:max-w-none">{uniName}</span>
-                                <span className="w-1 h-1 bg-gray-600 rounded-full shrink-0"></span>
-                                <span className="flex items-center gap-1 shrink-0"><MapPin className="w-3 h-3" /> {uniCity}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Sağ Taraf - İhtimal ve Ok */}
-                    <div className="flex items-center gap-4 shrink-0">
-                        <div className="text-right hidden sm:block">
-                            <div className={`text-sm font-bold ${styles.text}`}>%{probability}</div>
-                            <div className="text-[10px] text-gray-500">Kazanma İhtimali</div>
-                        </div>
-                        {/* Mobilde İhtimal Yuvarlağı */}
-                        <div className={`sm:hidden w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold ${probability > 80 ? 'border-green-500 text-green-500' : 'border-blue-500 text-blue-500'}`}>
-                            %{probability}
-                        </div>
-
-                        <div className={`p-1.5 rounded-full bg-white/5 transition-transform duration-300 ${isOpen ? 'rotate-180 bg-white/10' : ''}`}>
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. BODY - DETAYLAR VE GRAFİK - SADECE AÇIKKEN GÖRÜNÜR */}
-                {isOpen && (
-                    <div className="border-t border-white/5 animate-in slide-in-from-top-2 duration-300">
-                        <div className="flex flex-col md:flex-row">
-
-                            {/* SOL TARAF: SAYISAL VERİLER */}
-                            <div className="w-full md:w-7/12 p-5 bg-black/20 space-y-5">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-                                        <div className="text-[10px] text-gray-500 uppercase mb-1">Başarı Sıralaması</div>
-                                        <div className="text-sm font-bold text-white">#{program.ranking?.toLocaleString('tr-TR')}</div>
-                                    </div>
-                                    <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-                                        <div className="text-[10px] text-gray-500 uppercase mb-1">Taban Puan</div>
-                                        <div className="text-sm font-bold text-blue-400">{program.points || "---"}</div>
-                                    </div>
-                                    <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-                                        <div className="text-[10px] text-gray-500 uppercase mb-1">Kontenjan</div>
-                                        <div className="text-sm font-bold text-white">{program.quota}</div>
-                                    </div>
-                                    <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-                                        <div className="text-[10px] text-gray-500 uppercase mb-1">Puan Türü</div>
-                                        <div className="text-sm font-bold text-white">{program.score_type}</div>
-                                    </div>
-                                </div>
-
-                                <div className="pt-2">
-                                    <div className="text-[10px] text-gray-500 mb-2">Fakülte / Eğitim Türü</div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <span className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300 border border-white/5">{program.faculty}</span>
-                                        <span className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300 border border-white/5">{program.education_type}</span>
-                                    </div>
-                                </div>
-
-                                <Link href={`/universite/${program.university_slug}`} className="block w-full py-3 mt-2 bg-blue-600 hover:bg-blue-500 text-white text-center rounded-lg text-sm font-bold transition-colors">
-                                    Üniversiteyi Detaylı İncele
-                                </Link>
-                            </div>
-
-                            {/* SAĞ TARAF: RADAR GRAFİĞİ */}
-                            <div className="w-full md:w-5/12 p-4 bg-white/[0.02] md:border-l border-white/5 flex flex-col items-center justify-center relative">
-                                <div className="absolute top-2 right-2 px-2 py-1 bg-purple-500/10 text-purple-300 text-[9px] rounded border border-purple-500/20 font-bold uppercase tracking-wider">
-                                    TÜMA Analizi
-                                </div>
-                                <div className="w-full max-w-[280px] h-[260px]">
-                                    <UniversityRadarChart stats={program.university_stats} />
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    const generateAICommentary = () => {
-        if (!results || !ranking) return null;
-        const total = results.surprise_choices.length + results.ideal_choices.length + results.safe_choices.length;
-        if (total === 0) return null;
-        return (
-            <div className="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-blue-500/30 rounded-2xl p-6 mb-10 flex gap-5 items-start">
-                <div className="p-3 bg-blue-500/20 rounded-xl text-blue-400 shrink-0 hidden sm:block">
-                    <MessageSquareQuote className="w-8 h-8" />
-                </div>
-                <div>
-                    <h3 className="text-blue-200 font-bold text-lg mb-2">Yapay Zeka Analiz Özeti</h3>
-                    <p className="text-gray-300 text-sm leading-relaxed">
-                        Sıralamanız ({parseInt(ranking).toLocaleString()}) baz alındığında, sistem sizin için <strong className="text-white">{total} farklı program</strong> belirledi.
-                        Listede {results.surprise_choices.length > 0 && "motivasyonunuzu artıracak yüksek hedefler,"}
-                        {results.ideal_choices.length > 0 && " tam potansiyelinizi yansıtan ideal tercihler"}
-                        {results.safe_choices.length > 0 && " ve yerleşmenizi garanti altına alacak güvenli limanlar"} dengeli bir şekilde dağıtılmıştır.
-                    </p>
-                </div>
-            </div>
-        );
+        } catch (error) {
+            console.error("Hata:", error);
+            alert("Bir hata oluştu. Lütfen tekrar deneyin.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-[#020617] text-white pb-20 font-sans selection:bg-blue-500/30">
-            <div className="pt-28 pb-8 px-4 text-center">
-                <div className="inline-flex items-center justify-center p-2 mb-4 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    <span className="text-xs font-bold tracking-wide uppercase">Beta v2.2</span>
-                </div>
-                <h1 className="text-3xl md:text-5xl font-black mb-4 tracking-tight">
-                    Yapay Zeka <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Tercih Motoru</span>
-                </h1>
-                <p className="text-gray-400 max-w-xl mx-auto text-sm md:text-base">Algı mühendisliği ile güçlendirilmiş tercih algoritması.</p>
-            </div>
+        <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-20 font-sans">
 
-            <div className="max-w-5xl mx-auto px-4 mb-10">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase">Sıralaman</label>
-                            <input type="number" placeholder="Örn: 50000" value={ranking} onChange={(e) => setRanking(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-3 text-sm text-white focus:border-blue-500 outline-none transition-colors" />
+            {/* ÜST KISIM: ARAMA FORMU */}
+            <div className="max-w-5xl mx-auto mt-10">
+                <div className="text-center mb-10">
+                    <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 mb-4">
+                        Yapay Zeka Tercih Motoru
+                    </h1>
+                    <p className="text-gray-400 max-w-2xl mx-auto">
+                        Sadece puanına göre değil; yeteneklerine, hayallerine ve veri bilimine dayalı
+                        en doğru üniversite tercihlerini keşfet.
+                    </p>
+                </div>
+
+                <div className="bg-[#111] border border-gray-800 rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        {/* Sıralama */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sıralaman</label>
+                            <div className="relative">
+                                <Trophy className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+                                <input
+                                    type="number"
+                                    placeholder="Örn: 50000"
+                                    className="w-full bg-black/50 border border-gray-700 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-white placeholder-gray-600"
+                                    value={formData.ranking}
+                                    onChange={(e) => setFormData({ ...formData, ranking: e.target.value })}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase">Puan Türü</label>
-                            <select value={scoreType} onChange={(e) => setScoreType(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-3 text-sm text-white focus:border-blue-500 outline-none appearance-none transition-colors">
-                                {/* DÜZELTME: Seçenekleri temiz ve doğru value'larla map ediyoruz */}
-                                {SCORE_OPTIONS.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                    </option>
-                                ))}
-                            </select>
+
+                        {/* Puan Türü */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Puan Türü</label>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-black/50 border border-gray-700 rounded-lg py-2.5 px-4 focus:ring-2 focus:ring-blue-500 outline-none appearance-none text-white cursor-pointer"
+                                    value={formData.scoreType}
+                                    onChange={(e) => setFormData({ ...formData, scoreType: e.target.value })}
+                                >
+                                    <option value="SAY">SAYISAL (SAY)</option>
+                                    <option value="EA">EŞİT AĞIRLIK (EA)</option>
+                                    <option value="SOZ">SÖZEL (SÖZ)</option>
+                                    <option value="DIL">DİL (DİL)</option>
+                                </select>
+                                <ChevronRight className="absolute right-3 top-3 w-4 h-4 text-gray-500 rotate-90 pointer-events-none" />
+                            </div>
                         </div>
-                        <AutocompleteInput label="Şehir" placeholder="İstanbul..." value={cityFilter} onChange={setCityFilter} options={availableCities} />
-                        <AutocompleteInput label="Bölüm" placeholder="Bilgisayar..." value={deptFilter} onChange={setDeptFilter} options={availableDepts} />
+
+                        {/* Şehir (Akıllı Arama) */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Şehir</label>
+                            <div className="relative">
+                                <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+                                <input
+                                    type="text"
+                                    list="cities-list"
+                                    placeholder="Örn: İstanbul"
+                                    className="w-full bg-black/50 border border-gray-700 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none text-white placeholder-gray-600"
+                                    value={formData.city}
+                                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                />
+                                <datalist id="cities-list">
+                                    {availableCities.map((city, idx) => (
+                                        <option key={idx} value={city} />
+                                    ))}
+                                </datalist>
+                            </div>
+                        </div>
+
+                        {/* Bölüm (Akıllı Arama) */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bölüm</label>
+                            <div className="relative">
+                                <BookOpen className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+                                <input
+                                    type="text"
+                                    list="depts-list"
+                                    placeholder="Örn: Bilgisayar"
+                                    className="w-full bg-black/50 border border-gray-700 rounded-lg py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none text-white placeholder-gray-600"
+                                    value={formData.department}
+                                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                                />
+                                <datalist id="depts-list">
+                                    {availableDepts.map((dept, idx) => (
+                                        <option key={idx} value={dept} />
+                                    ))}
+                                </datalist>
+                            </div>
+                        </div>
                     </div>
-                    <button onClick={handleAnalyze} disabled={loading || !ranking} className="w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
-                        {loading ? "Analiz Ediliyor..." : "Analizi Başlat"}
+
+                    <button
+                        onClick={handleSearch}
+                        disabled={loading}
+                        className="w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3.5 rounded-lg transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                    >
+                        {loading ? (
+                            <span className="flex items-center gap-2">
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                Analiz Yapılıyor...
+                            </span>
+                        ) : (
+                            <>
+                                <Zap className="w-5 h-5" /> Analizi Başlat
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
 
+            {/* SONUÇLAR (GRID YAPISI) */}
             {results && (
-                <div id="results-section" className="max-w-4xl mx-auto px-4 animate-in fade-in slide-in-from-bottom-10 duration-700">
-                    {generateAICommentary()}
-                    <div className="space-y-12">
-                        {results.surprise_choices.length > 0 && <section><h2 className="text-xl font-bold text-orange-400 mb-4 flex items-center gap-2"><TrendingUp className="w-6 h-6" /> Yüksek Hedefler</h2>{results.surprise_choices.map(prog => <ProgramCard key={prog.id} program={prog} type="surprise" />)}</section>}
-                        {results.ideal_choices.length > 0 && <section><h2 className="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2"><AlertCircle className="w-6 h-6" /> İdeal Tercihler</h2>{results.ideal_choices.map(prog => <ProgramCard key={prog.id} program={prog} type="ideal" />)}</section>}
-                        {results.safe_choices.length > 0 && <section><h2 className="text-xl font-bold text-green-400 mb-4 flex items-center gap-2"><Anchor className="w-6 h-6" /> Güvenli Liman</h2>{results.safe_choices.map(prog => <ProgramCard key={prog.id} program={prog} type="safe" />)}</section>}
-                        {(results.surprise_choices.length === 0 && results.ideal_choices.length === 0 && results.safe_choices.length === 0) && <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/10"><AlertCircle className="w-16 h-16 text-gray-600 mx-auto mb-4" /><h3 className="text-xl font-bold text-white">Sonuç Bulunamadı</h3></div>}
-                    </div>
+                <div className="max-w-7xl mx-auto mt-16 space-y-16">
+
+                    {results.surprise_choices?.length > 0 && (
+                        <ResultCategory
+                            title="Yüksek Hedefler"
+                            icon={<Zap className="w-6 h-6 text-yellow-400" />}
+                            color="yellow"
+                            programs={results.surprise_choices}
+                            onCardClick={setSelectedProgram}
+                        />
+                    )}
+
+                    {results.ideal_choices?.length > 0 && (
+                        <ResultCategory
+                            title="İdeal Tercihler"
+                            icon={<Trophy className="w-6 h-6 text-blue-400" />}
+                            color="blue"
+                            programs={results.ideal_choices}
+                            onCardClick={setSelectedProgram}
+                        />
+                    )}
+
+                    {results.safe_choices?.length > 0 && (
+                        <ResultCategory
+                            title="Güvenli Limanlar"
+                            icon={<Shield className="w-6 h-6 text-green-400" />}
+                            color="green"
+                            programs={results.safe_choices}
+                            onCardClick={setSelectedProgram}
+                        />
+                    )}
                 </div>
             )}
+
+            {/* POPUP MODAL (DETAY) */}
+            <AnimatePresence>
+                {selectedProgram && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedProgram(null)}>
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-[#111] border border-gray-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl relative"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header */}
+                            <div className="sticky top-0 bg-[#111]/95 backdrop-blur z-10 border-b border-gray-800 p-6 flex justify-between items-start">
+                                <div className="flex gap-4">
+                                    <div className="w-16 h-16 bg-white rounded-lg p-1 flex items-center justify-center">
+                                        {selectedProgram.university_logo ? (
+                                            <img src={selectedProgram.university_logo} alt="logo" className="max-w-full max-h-full object-contain" />
+                                        ) : (
+                                            <Building2 className="text-black w-8 h-8" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white leading-tight">{selectedProgram.name}</h2>
+                                        <p className="text-gray-400 text-lg">{selectedProgram.university_name}</p>
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            <Badge>{selectedProgram.university_city}</Badge>
+                                            <Badge>{selectedProgram.university_type}</Badge>
+                                            {selectedProgram.is_english && <Badge color="blue">İngilizce</Badge>}
+                                            {selectedProgram.scholarship_rate > 0 && <Badge color="green">%{selectedProgram.scholarship_rate} Burslu</Badge>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setSelectedProgram(null)} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
+                                    <X className="w-6 h-6 text-gray-400" />
+                                </button>
+                            </div>
+
+                            {/* Body */}
+                            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* SOL: İstatistikler */}
+                                <div className="space-y-6">
+                                    <div className="bg-gray-900/50 rounded-xl p-5 border border-gray-800">
+                                        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Akademik Veriler</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <StatItem label="Başarı Sırası" value={`#${selectedProgram.ranking}`} highlight />
+                                            <StatItem label="Taban Puan" value={selectedProgram.score} />
+                                            <StatItem label="Kontenjan" value={selectedProgram.quota} />
+                                            <StatItem label="Puan Türü" value="SAY" />
+                                        </div>
+                                    </div>
+
+                                    {/* RADAR GRAFİĞİ: Harici Bileşen */}
+                                    <div className="bg-gray-900/50 rounded-xl p-2 border border-gray-800 flex flex-col items-center justify-center">
+                                        {selectedProgram.university_stats ? (
+                                            <UniversityRadarChart stats={selectedProgram.university_stats} />
+                                        ) : (
+                                            <div className="h-[200px] flex items-center justify-center text-gray-500 text-sm">
+                                                Veri bulunamadı.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* SAĞ: Yorumlar ve Açıklama */}
+                                <div className="space-y-6">
+                                    <div className="bg-blue-900/10 border border-blue-800/30 rounded-xl p-6">
+                                        <div className="flex items-center gap-2 text-blue-400 font-bold mb-4">
+                                            <Zap className="w-5 h-5" />
+                                            <span>Yapay Zeka Analizi</span>
+                                        </div>
+                                        <ul className="space-y-3">
+                                            {selectedProgram.reasons.map((reason, i) => (
+                                                <li key={i} className="flex gap-3 text-gray-300 text-sm leading-relaxed">
+                                                    <span className="mt-1.5 w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
+                                                    {reason}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    <div className="text-sm text-gray-400 leading-relaxed">
+                                        <p>
+                                            <strong>{selectedProgram.university_name}</strong>, {selectedProgram.university_city} şehrinin
+                                            önemli eğitim kurumlarından biridir. Bölümün eğitim dili <strong>{selectedProgram.is_english ? 'İngilizce' : 'Türkçe'}</strong> olup,
+                                            geniş akademik kadrosu ve kampüs olanaklarıyla öne çıkmaktadır.
+                                        </p>
+                                    </div>
+
+                                    <button className="w-full py-3 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                                        Üniversite Sayfasına Git
+                                    </button>
+                                </div>
+                            </div>
+
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
         </div>
     );
 }
 
-// --- BUILD HATASINI ÇÖZEN KAPSAYICI (Default Export) ---
-export default function TercihMotoruPage() {
-    return (
-        <Suspense fallback={<div className="min-h-screen bg-[#020617] flex items-center justify-center text-white"><Loader2 className="w-10 h-10 animate-spin text-blue-500" /></div>}>
-            <TercihMotoruContent />
-        </Suspense>
-    );
+// --- DÜZELTME 2 & 3: TİPLERİ BELİRTİLMİŞ YARDIMCI BİLEŞENLER ---
+
+interface ResultCategoryProps {
+    title: string;
+    icon: React.ReactNode;
+    color: 'yellow' | 'blue' | 'green';
+    programs: Program[];
+    onCardClick: (prog: Program) => void;
 }
+
+const ResultCategory = ({ title, icon, color, programs, onCardClick }: ResultCategoryProps) => {
+    const colorClasses = {
+        yellow: "text-yellow-400 border-yellow-500/20 bg-yellow-500/5 hover:border-yellow-500/50",
+        blue: "text-blue-400 border-blue-500/20 bg-blue-500/5 hover:border-blue-500/50",
+        green: "text-green-400 border-green-500/20 bg-green-500/5 hover:border-green-500/50",
+    };
+
+    const badgeColors = {
+        yellow: 'text-yellow-400',
+        blue: 'text-blue-400',
+        green: 'text-green-400'
+    };
+
+    return (
+        <div>
+            <div className="flex items-center gap-3 mb-6">
+                {icon}
+                <h2 className="text-2xl font-bold text-white">{title}</h2>
+                <span className="px-2 py-0.5 bg-gray-800 rounded-full text-xs text-gray-400 font-mono">
+                    {programs.length}
+                </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {programs.map((prog: Program) => (
+                    <motion.div
+                        key={prog.id}
+                        whileHover={{ y: -5 }}
+                        onClick={() => onCardClick(prog)}
+                        className={`relative p-5 rounded-xl border cursor-pointer transition-all group ${colorClasses[color]}`}
+                    >
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
+                                {prog.university_logo ? (
+                                    <img src={prog.university_logo} className="w-8 h-8 object-contain" alt="logo" />
+                                ) : (
+                                    <Building2 className="w-8 h-8 text-white" />
+                                )}
+                            </div>
+                            <div className="flex flex-col items-end">
+                                <span className={`text-sm font-bold ${badgeColors[color]}`}>
+                                    #{prog.ranking}
+                                </span>
+                            </div>
+                        </div>
+
+                        <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 min-h-[3.5rem]">
+                            {prog.name}
+                        </h3>
+                        <p className="text-sm text-gray-400 mb-4 line-clamp-1">{prog.university_name}</p>
+
+                        <div className="flex gap-2 text-xs text-gray-500 mt-auto">
+                            <span className="bg-black/30 px-2 py-1 rounded">{prog.university_city}</span>
+                            <span className="bg-black/30 px-2 py-1 rounded">{prog.scholarship_rate > 0 ? `%${prog.scholarship_rate}` : 'Ücret/Devlet'}</span>
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+interface BadgeProps {
+    children: React.ReactNode;
+    color?: 'gray' | 'blue' | 'green';
+}
+
+const Badge = ({ children, color = 'gray' }: BadgeProps) => {
+    const colors = {
+        gray: "bg-gray-800 text-gray-300",
+        blue: "bg-blue-900/30 text-blue-400",
+        green: "bg-green-900/30 text-green-400"
+    };
+    return <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${colors[color]}`}>{children}</span>;
+};
+
+interface StatItemProps {
+    label: string;
+    value: string | number;
+    highlight?: boolean;
+}
+
+const StatItem = ({ label, value, highlight }: StatItemProps) => (
+    <div className={`p-3 rounded-lg border ${highlight ? 'bg-blue-900/20 border-blue-800' : 'bg-black/20 border-gray-800'}`}>
+        <div className="text-xs text-gray-500 mb-1">{label}</div>
+        <div className={`font-mono font-bold ${highlight ? 'text-blue-400 text-lg' : 'text-gray-300'}`}>{value}</div>
+    </div>
+);
