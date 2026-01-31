@@ -133,7 +133,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'program_code', 'name', 'faculty', 
             'language', 'education_type', 'score_type', 'duration',
-            'quota', 'school_rank_quota', 'base_score', 'ranking',
+            'quota', 'base_score', 'ranking',
             'special_conditions', 'accreditation',
             'university'
         ]
@@ -382,10 +382,13 @@ class ProgramSuggestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
         fields = [
-            'id', 'name', 'program_code', 'faculty', 'language', 'education_type',
-            'score_type', 'duration', 'quota', 'base_score', 'ranking',
+            'id', 'name', 'program_code', 'faculty', 
+            'language', 'is_english', 'education_type',
+            'score_type', 'duration', 
+            'quota', 'base_score', 'ranking',
+            'scholarship_rate', 'special_quotas', # Yeni alanlar eklendi
             'university_name', 'university_slug', 'university_city', 
-            'university_type', 'university_logo', 'university_stats' # <--- EKLENDİ
+            'university_type', 'university_logo', 'university_stats'
         ]
 
     def get_university_logo(self, obj):

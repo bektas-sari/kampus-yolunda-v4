@@ -88,7 +88,6 @@ class University(models.Model):
     def __str__(self): return self.name
 
 # --- 1. MODEL: RADAR GRAFİĞİ İÇİN (TÜMA / KALİTE VERİLERİ) ---
-# Bu model her üniversite için SADECE BİR tane olur (OneToOne).
 class UniversityStats(models.Model):
     university = models.OneToOneField(
         University, 
@@ -97,7 +96,6 @@ class UniversityStats(models.Model):
         verbose_name="Üniversite"
     )
     
-    # TÜMA 2025 ve Radar Grafiği Verileri (0-100 Puan)
     academic_score = models.IntegerField(default=50, verbose_name="Akademik Puan")
     campus_score = models.IntegerField(default=50, verbose_name="Kampüs Puanı")
     social_score = models.IntegerField(default=50, verbose_name="Sosyal Yaşam Puanı")
@@ -119,7 +117,6 @@ class UniversityStats(models.Model):
         return f"{self.university.name} - Kalite Skorları"
 
 # --- 2. MODEL: GÜNLÜK TRAFİK ANALİZİ İÇİN (PERFORMANS VERİLERİ) ---
-# Bu model her üniversite için HER GÜN yeni bir kayıt açar (ForeignKey).
 class UniversityAnalytics(models.Model):
     university = models.ForeignKey(
         University, 
@@ -129,14 +126,13 @@ class UniversityAnalytics(models.Model):
     )
     date = models.DateField(auto_now_add=True, verbose_name="Tarih")
     
-    # Trafik Metrikleri
     page_views = models.PositiveIntegerField(default=0, verbose_name="Sayfa Görüntülenme")
     search_appearances = models.PositiveIntegerField(default=0, verbose_name="Aramada Görünme")
     website_clicks = models.PositiveIntegerField(default=0, verbose_name="Website Tıklama")
     phone_clicks = models.PositiveIntegerField(default=0, verbose_name="Telefon Tıklama")
     
     class Meta:
-        unique_together = ('university', 'date') # Bir üniversitenin aynı gün için tek kaydı olur
+        unique_together = ('university', 'date')
         verbose_name = "Günlük Trafik Analizi"
         verbose_name_plural = "Günlük Trafik Analizleri"
         ordering = ['-date']
@@ -187,21 +183,25 @@ class Department(models.Model):
     program_code = models.CharField(max_length=20, unique=True, null=True, blank=True, verbose_name="Program Kodu (YÖK ID)", help_text="ÖSYM Program Kodu (Örn: 100110015)")
     name = models.CharField(max_length=200, verbose_name="Bölüm Adı")
     faculty = models.CharField(max_length=200, blank=True, verbose_name="Fakülte")
-    language = models.CharField(max_length=50, default="Türkçe", verbose_name="Eğitim Dili")
-    duration = models.IntegerField(default=4, verbose_name="Süre (Yıl)")
-    score_type = models.CharField(max_length=10, choices=SCORE_TYPES, default='SAY', verbose_name="Puan Türü")
-    education_type = models.CharField(max_length=50, default="Örgün Öğretim", verbose_name="Öğretim Türü")
-    quota = models.IntegerField(null=True, blank=True, verbose_name="Genel Kontenjan")
-    school_rank_quota = models.IntegerField(null=True, blank=True, verbose_name="Okul 1. Kontenjanı")
-    base_score = models.FloatField(null=True, blank=True, verbose_name="Taban Puan (2024)")
     
-    # HATA BURADAYDI, ŞİMDİ DÜZELTİLDİ:
-    ranking = models.IntegerField(
-        verbose_name="Başarı Sıralaması (2025 Tahmini)", 
-        null=True, 
-        blank=True,
-        default=0
-    )
+    # --- YENİLENMİŞ ALANLAR ---
+    language = models.CharField(max_length=50, default="Türkçe", verbose_name="Eğitim Dili")
+    is_english = models.BooleanField(default=False, verbose_name="İngilizce mi?") # Hızlı filtreleme için
+    education_type = models.CharField(max_length=50, default="Örgün Öğretim", verbose_name="Öğretim Türü")
+    
+    # Burs/Ücret Durumu (0=Devlet/Ücretli, 100=Tam Burslu, 50=%50)
+    scholarship_rate = models.IntegerField(default=0, verbose_name="Burs Oranı (%)")
+    
+    score_type = models.CharField(max_length=10, choices=SCORE_TYPES, default='SAY', verbose_name="Puan Türü")
+    duration = models.IntegerField(default=4, verbose_name="Süre (Yıl)")
+    
+    # Kontenjan ve Puanlar
+    quota = models.IntegerField(null=True, blank=True, verbose_name="Genel Kontenjan")
+    base_score = models.FloatField(null=True, blank=True, verbose_name="Taban Puan (2024)")
+    ranking = models.IntegerField(verbose_name="Başarı Sıralaması (Tahmini)", null=True, blank=True, default=0)
+    
+    # Özel Kontenjan Verileri (Okul 1.si, Depremzede vb.) - JSON olarak tutuyoruz
+    special_quotas = models.JSONField(default=dict, blank=True, verbose_name="Özel Kontenjan Detayları")
     
     special_conditions = models.TextField(blank=True, verbose_name="Özel Koşullar")
     accreditation = models.CharField(max_length=100, blank=True, verbose_name="Akreditasyon")
@@ -209,6 +209,11 @@ class Department(models.Model):
     class Meta:
         verbose_name = "Bölüm / Program"
         verbose_name_plural = "Bölümler"
+        indexes = [
+            models.Index(fields=['score_type', 'ranking']),
+            models.Index(fields=['is_english']),
+            models.Index(fields=['scholarship_rate']),
+        ]
 
     def __str__(self): return f"{self.name} - {self.university.name}"
 
