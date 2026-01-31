@@ -48,14 +48,24 @@ logger = logging.getLogger(__name__)
 
 # --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
 class SystemWarmupView(views.APIView):
+    """
+    Render Shell erişimi olmadığı için, HTTP üzerinden
+    CSV veri yükleme komutunu tetikler ve ÇIKTIYI GÖSTERİR.
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
         status_report = []
+        detailed_logs = "" # Terminal çıktıları buraya gelecek
+        
         try:
-            call_command('migrate', interactive=False)
+            # 1. MIGRATION (Veritabanı Güncelleme)
+            out_migrate = io.StringIO()
+            call_command('migrate', interactive=False, stdout=out_migrate)
             status_report.append("✅ Veritabanı (Migration) güncellendi.")
+            detailed_logs += f"--- MIGRATE LOG ---\n{out_migrate.getvalue()}\n"
 
+            # 2. DOSYA KONTROLÜ
             file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
             if not os.path.exists(file_path):
                 return Response({
@@ -66,32 +76,44 @@ class SystemWarmupView(views.APIView):
                 }, status=200)
             
             status_report.append(f"✅ Dosya bulundu: {file_path}")
-            call_command('load_osym_data')
-            status_report.append("✅ ÖSYM Verileri Yüklendi.")
 
+            # 3. VERİ YÜKLEME (Captured Output)
+            # load_osym_data komutunun tüm print çıktılarını 'out_load' değişkenine hapsediyoruz.
+            out_load = io.StringIO()
+            try:
+                call_command('load_osym_data', stdout=out_load, stderr=out_load)
+                status_report.append("✅ ÖSYM Yükleme Komutu Çalıştırıldı.")
+            except Exception as e:
+                status_report.append(f"❌ Yükleme sırasında hata: {str(e)}")
+            
+            # Yakalanan çıktıları rapora ekle
+            command_output = out_load.getvalue()
+            detailed_logs += f"\n--- LOAD DATA LOG ---\n{command_output}\n"
+
+            # TÜMA (Varsa)
             tuma_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
             if os.path.exists(tuma_path):
-                call_command('load_tuma_data', tuma_path)
+                out_tuma = io.StringIO()
+                call_command('load_tuma_data', tuma_path, stdout=out_tuma)
                 status_report.append("✅ TÜMA Verileri Güncellendi.")
+                detailed_logs += f"\n--- TUMA LOG ---\n{out_tuma.getvalue()}\n"
             
             return Response({
                 "status": "success",
+                "message": "İşlem tamamlandı. Detaylar aşağıda:",
                 "report": status_report,
-                "message": "Sistem Başarıyla Kuruldu."
+                "detailed_logs": detailed_logs.split('\n') # Satır satır okumak için
             }, status=200)
 
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            logger.error(f"Warmup Error: {error_details}")
-            
             return Response({
                 "status": "critical_error",
                 "error_summary": str(e),
                 "traceback": error_details,
                 "report_so_far": status_report
             }, status=200)
-
 # =============================================================================
 # 1. VIEWSETS (Standart CRUD İşlemleri)
 # =============================================================================
