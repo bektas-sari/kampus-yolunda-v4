@@ -30,8 +30,9 @@ urlpatterns = [
     # Router URL'leri
     path('', include(router.urls)),
 
-    # SYSTEM WARMUP (Acil Durum Data Loader)
-    path('admin/system-warmup/', views.SystemWarmupView.as_view(), name='system_warmup'),
+    # 🔥 SYSTEM WARMUP (Uzaktan Tetikleyici) 🔥
+    # Tarayıcıdan bu adrese gidince veritabanını güncelleyecek
+    path('system/warmup/', views.SystemWarmupView.as_view(), name='system_warmup'),
 
     # Kullanıcı & Auth
     path('auth/register/', views.RegisterView.as_view(), name='register'),
@@ -54,5 +55,3 @@ urlpatterns = [
     path('tercih-motoru/', views.TercihMotoruView.as_view(), name='tercih_motoru'),
     path('filters/', views.FilterView.as_view(), name='get_filters'),
 ]
-
-# Son guncelleme
