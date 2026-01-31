@@ -1,6 +1,6 @@
 import logging
 import os
-import io # Unutulan kütüphane eklendi
+import io 
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.db.models import F, Q
@@ -42,18 +42,25 @@ from .serializers import (
     ProgramSuggestionSerializer 
 )
 
+# --- UTILS ---
+from .utils import calculate_probability
+
 logger = logging.getLogger(__name__)
 
 # --- SYSTEM WARMUP (BAKIM/DATA LOADER) ---
 class SystemWarmupView(views.APIView):
+    """
+    Render Shell erişimi olmadığı için, HTTP üzerinden
+    CSV veri yükleme komutunu tetikler ve ÇIKTIYI GÖSTERİR.
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
         status_report = []
-        detailed_logs = ""
+        detailed_logs = "" # Terminal çıktıları buraya gelecek
         
         try:
-            # 1. MIGRATION
+            # 1. MIGRATION (Veritabanı Güncelleme)
             out_migrate = io.StringIO()
             call_command('migrate', interactive=False, stdout=out_migrate)
             status_report.append("✅ Veritabanı (Migration) güncellendi.")
@@ -62,36 +69,60 @@ class SystemWarmupView(views.APIView):
             # 2. DOSYA KONTROLÜ
             file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
             if not os.path.exists(file_path):
-                return Response({"status": "error", "message": "Dosya Yok"}, status=200)
-            status_report.append("✅ Dosya Mevcut")
+                return Response({
+                    "status": "error", 
+                    "message": f"Dosya Bulunamadı! Aranan yer: {file_path}",
+                    "current_dir": os.getcwd(),
+                    "dir_content": os.listdir(settings.BASE_DIR)
+                }, status=200)
+            
+            status_report.append(f"✅ Dosya bulundu: {file_path}")
 
-            # 3. VERİ YÜKLEME
+            # 3. VERİ YÜKLEME (Captured Output)
             out_load = io.StringIO()
             try:
+                # stdout ve stderr'i yakalıyoruz
                 call_command('load_osym_data', stdout=out_load, stderr=out_load)
-                status_report.append("✅ ÖSYM Yükleme Tamamlandı.")
+                status_report.append("✅ ÖSYM Yükleme Komutu Çalıştırıldı.")
             except Exception as e:
-                status_report.append(f"❌ Yükleme Hatası: {str(e)}")
+                status_report.append(f"❌ Yükleme sırasında hata: {str(e)}")
             
-            detailed_logs += f"\n--- LOAD LOG ---\n{out_load.getvalue()}\n"
+            # Yakalanan çıktıları rapora ekle
+            command_output = out_load.getvalue()
+            detailed_logs += f"\n--- LOAD DATA LOG ---\n{command_output}\n"
 
-            # 4. TÜMA
+            # 4. TÜMA (DÜZELTİLEN KISIM BURASI)
             tuma_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
             if os.path.exists(tuma_path):
-                call_command('load_tuma_data', tuma_path)
-                status_report.append("✅ TÜMA Güncellendi.")
+                out_tuma = io.StringIO()
+                try:
+                    # HATA BURADAYDI: tuma_path argümanını sildik çünkü komut yolu zaten biliyor.
+                    call_command('load_tuma_data', stdout=out_tuma, stderr=out_tuma)
+                    status_report.append("✅ TÜMA Verileri Güncellendi.")
+                except Exception as e:
+                    status_report.append(f"❌ TÜMA Hatası: {str(e)}")
+                
+                detailed_logs += f"\n--- TUMA LOG ---\n{out_tuma.getvalue()}\n"
             
             return Response({
                 "status": "success",
+                "message": "İşlem tamamlandı. Detaylar aşağıda:",
                 "report": status_report,
-                "detailed_logs": detailed_logs.split('\n')
+                "detailed_logs": detailed_logs.split('\n') 
             }, status=200)
 
         except Exception as e:
-            return Response({"status": "critical_error", "error": str(e)}, status=200)
+            import traceback
+            error_details = traceback.format_exc()
+            return Response({
+                "status": "critical_error",
+                "error_summary": str(e),
+                "traceback": error_details,
+                "report_so_far": status_report
+            }, status=200)
 
 # =============================================================================
-# 1. VIEWSETS (Standart)
+# 1. VIEWSETS (Standart CRUD İşlemleri)
 # =============================================================================
 
 class UniversityViewSet(viewsets.ReadOnlyModelViewSet):
@@ -101,8 +132,11 @@ class UniversityViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['city', 'uni_type', 'is_promoted']
     search_fields = ['name', 'city']
     permission_classes = [AllowAny]
+
     def get_serializer_class(self):
-        return UniversityListSerializer if self.action == 'list' else UniversityDetailSerializer
+        if self.action == 'list':
+            return UniversityListSerializer
+        return UniversityDetailSerializer
 
 class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Department.objects.all().select_related('university')
@@ -127,21 +161,35 @@ class DormitoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
 class StudentHouseViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = StudentHouse.objects.all().order_by('-is_promoted', '-created_at')
+    queryset = StudentHouse.objects.all() 
     serializer_class = StudentHouseSerializer
     lookup_field = 'slug'
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['city', 'room_count']
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['city', 'room_count', 'is_furnished']
+    search_fields = ['title', 'district', 'description']
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        queryset = StudentHouse.objects.all().order_by('-is_promoted', '-created_at')
+        min_price = self.request.query_params.get('min_price')
+        max_price = self.request.query_params.get('max_price')
+        
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+        return queryset
 
 class ScholarshipViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Scholarship.objects.filter(is_active=True).order_by('deadline')
     serializer_class = ScholarshipSerializer
+    lookup_field = 'slug'
     permission_classes = [AllowAny]
 
 class NewsViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = News.objects.filter(is_published=True).order_by('-published_at')
     serializer_class = NewsSerializer
+    lookup_field = 'slug'
     permission_classes = [AllowAny]
 
 class PromotionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -158,31 +206,62 @@ class CampusReelViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CampusReel.objects.all().order_by('-created_at')
     serializer_class = CampusReelSerializer
     permission_classes = [AllowAny]
+
     def get_queryset(self):
-        qs = super().get_queryset()
-        if self.request.query_params.get('homepage') == 'true':
-            qs = qs.filter(show_on_homepage=True)
-        return qs
+        queryset = super().get_queryset()
+        homepage = self.request.query_params.get('homepage')
+        if homepage == 'true':
+            queryset = queryset.filter(show_on_homepage=True)
+        return queryset
 
 class LeadViewSet(viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
-    permission_classes = [AllowAny]
+    
+    def get_permissions(self):
+        if self.action == 'create':
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.filter(is_approved=True).order_by('-created_at')
     serializer_class = ReviewSerializer
     permission_classes = [AllowAny]
-    
+
     def create(self, request, *args, **kwargs):
-        # Basitleştirilmiş Create Logic
-        try:
-            return super().create(request, *args, **kwargs)
-        except:
-            return Response({"error": "Review creation failed"}, status=400)
+        serializer = ReviewCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            model_type = serializer.validated_data.pop('model_type')
+            object_id = serializer.validated_data.pop('object_id')
+            
+            try:
+                ct = None
+                if model_type == 'university':
+                    ct = ContentType.objects.get(app_label='api', model='university')
+                elif model_type == 'dormitory':
+                    ct = ContentType.objects.get(app_label='api', model='dormitory')
+                elif model_type == 'venue':
+                    ct = ContentType.objects.get(app_label='api', model='campusvenue')
+                
+                if not ct:
+                    return Response({"error": "Geçersiz model tipi"}, status=status.HTTP_400_BAD_REQUEST)
+
+                Review.objects.create(
+                    content_type=ct,
+                    object_id=object_id,
+                    author_name=serializer.validated_data['author_name'],
+                    rating=serializer.validated_data['rating'],
+                    comment=serializer.validated_data['comment'],
+                    is_approved=True, 
+                    user=request.user if request.user.is_authenticated else None
+                )
+                return Response({"message": "Yorumunuz başarıyla yayınlandı."}, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # =============================================================================
-# 2. ÖZEL İŞLEVLER
+# 2. ÖZEL İŞLEVLER (Auth, Favori, İstatistik)
 # =============================================================================
 
 class RegisterView(generics.CreateAPIView):
@@ -193,51 +272,122 @@ class RegisterView(generics.CreateAPIView):
 class ManageUserView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    def get_object(self): return self.request.user
+    def get_object(self):
+        return self.request.user
 
-# Favori View'ları (Basitleştirilmiş)
+# --- FAVORİ İŞLEMLERİ ---
+
 class FavoriteToggleView(views.APIView):
     permission_classes = [IsAuthenticated]
-    def post(self, request): return Response({'status': 'ok'}) # Placeholder
+    def post(self, request):
+        house_id = request.data.get('house_id')
+        house = get_object_or_404(StudentHouse, id=house_id)
+        fav, created = FavoriteStudentHouse.objects.get_or_create(user=request.user, student_house=house)
+        if not created:
+            fav.delete()
+            return Response({'liked': False})
+        return Response({'liked': True})
 
 class FavoriteListView(generics.ListAPIView):
     serializer_class = FavoriteStudentHouseSerializer
     permission_classes = [IsAuthenticated]
-    def get_queryset(self): return FavoriteStudentHouse.objects.filter(user=self.request.user)
+    def get_queryset(self):
+        return FavoriteStudentHouse.objects.filter(user=self.request.user)
 
 class FavoriteUniversityToggleView(views.APIView):
     permission_classes = [IsAuthenticated]
-    def post(self, request): return Response({'status': 'ok'})
+    def post(self, request):
+        uni_id = request.data.get('university_id')
+        uni = get_object_or_404(University, id=uni_id)
+        fav, created = FavoriteUniversity.objects.get_or_create(user=request.user, university=uni)
+        if not created:
+            fav.delete()
+            return Response({'liked': False})
+        return Response({'liked': True})
 
 class FavoriteUniversityListView(generics.ListAPIView):
     serializer_class = FavoriteUniversitySerializer
     permission_classes = [IsAuthenticated]
-    def get_queryset(self): return FavoriteUniversity.objects.filter(user=self.request.user)
+    def get_queryset(self):
+        return FavoriteUniversity.objects.filter(user=self.request.user)
 
 class FavoriteDormitoryToggleView(views.APIView):
     permission_classes = [IsAuthenticated]
-    def post(self, request): return Response({'status': 'ok'})
+    def post(self, request):
+        dorm_id = request.data.get('dormitory_id')
+        dorm = get_object_or_404(Dormitory, id=dorm_id)
+        fav, created = FavoriteDormitory.objects.get_or_create(user=request.user, dormitory=dorm)
+        if not created:
+            fav.delete()
+            return Response({'liked': False})
+        return Response({'liked': True})
 
 class FavoriteDormitoryListView(generics.ListAPIView):
     serializer_class = FavoriteDormitorySerializer
     permission_classes = [IsAuthenticated]
-    def get_queryset(self): return FavoriteDormitory.objects.filter(user=self.request.user)
+    def get_queryset(self):
+        return FavoriteDormitory.objects.filter(user=self.request.user)
+
+# --- İSTATİSTİK TAKİBİ ---
 
 class TrackActivityView(views.APIView):
     permission_classes = [AllowAny]
-    def post(self, request): return Response({"status": "tracked"})
+    
+    def post(self, request):
+        action_type = request.data.get('type')
+        slug = request.data.get('slug')
+        obj_id = request.data.get('id')
+        today = timezone.now().date()
+        
+        try:
+            if action_type in ['university_view', 'website_click', 'phone_click']:
+                if slug:
+                    uni = University.objects.filter(slug=slug).first()
+                    if uni:
+                        stats, _ = UniversityStats.objects.get_or_create(university=uni, date=today)
+                        if action_type == 'university_view':
+                            stats.page_views = F('page_views') + 1
+                        elif action_type == 'website_click':
+                            stats.website_clicks = F('website_clicks') + 1
+                        elif action_type == 'phone_click':
+                            stats.phone_clicks = F('phone_clicks') + 1
+                        stats.save()
+                        return Response({"status": "tracked"}, status=200)
+            
+            elif action_type == 'dept_view':
+                if obj_id:
+                    dept = Department.objects.filter(id=obj_id).first()
+                    if dept:
+                        stats, _ = DepartmentStats.objects.get_or_create(department=dept, date=today)
+                        stats.page_views = F('page_views') + 1
+                        stats.save()
+                        return Response({"status": "tracked"}, status=200)
+                        
+        except Exception as e:
+            return Response({"status": "error", "detail": str(e)}, status=400)
+            
+        return Response({"status": "invalid_action_or_missing_data"}, status=400)
 
 # =============================================================================
-# 3. TERCİH MOTORU (DÜZELTİLMİŞ)
+# 3. TERCİH MOTORU (SONSUZ GÜVEN ALGORİTMASI V2.0)
 # =============================================================================
 
 class TercihMotoruView(APIView):
+    """
+    Sonsuz Güven Algoritması v2.0
+    Ranking Volatilitesi + Akıllı Eşleşme Puanı (Match Score)
+    """
     permission_classes = [AllowAny]
 
     def normalize_tr(self, text):
         if not text: return ""
         text = str(text).strip()
-        mapping = {'i': 'I', 'İ': 'I', 'ı': 'I', 'I': 'I', 'ğ': 'G', 'Ğ': 'G', 'ü': 'U', 'Ü': 'U', 'ş': 'S', 'Ş': 'S', 'ö': 'O', 'Ö': 'O', 'ç': 'C', 'Ç': 'C'}
+        mapping = {
+            'i': 'I', 'İ': 'I', 'ı': 'I', 'I': 'I',
+            'ğ': 'G', 'Ğ': 'G', 'ü': 'U', 'Ü': 'U',
+            'ş': 'S', 'Ş': 'S', 'ö': 'O', 'Ö': 'O',
+            'ç': 'C', 'Ç': 'C'
+        }
         normalized = []
         for char in text:
             if char in mapping: normalized.append(mapping[char])
@@ -245,51 +395,71 @@ class TercihMotoruView(APIView):
         return "".join(normalized)
 
     def generate_insights(self, dept, ranking, city_filter, dept_filter):
+        """Bu bölüm neden önerildi? (İnsan dokunuşu)"""
         reasons = []
-        diff = dept.ranking - ranking
-        if diff > 0: reasons.append(f"Sıralamanız {diff:,} kişi daha iyi.")
-        elif abs(diff) < ranking * 0.1: reasons.append("Tam puanınızın karşılığı.")
         
+        # 1. Sıralama Durumu
+        diff = dept.ranking - ranking
+        if diff > 0:
+            reasons.append(f"Sıralamanız bu bölümden {diff:,} kişi daha iyi (Avantajlı)")
+        elif abs(diff) < ranking * 0.1:
+            reasons.append("Tam puanınızın/sıralamanızın karşılığı (İdeal)")
+        
+        # 2. Şehir Uyumu
         if city_filter:
+            # Basit kontrol
             for c in city_filter:
                 if self.normalize_tr(c) in self.normalize_tr(dept.university.city):
-                    reasons.append(f"Şehir Tercihi: {dept.university.city}")
+                    reasons.append(f"Tercih ettiğiniz şehirde: {dept.university.city}")
                     break
         
-        if dept.scholarship_rate == 100: reasons.append("Tam Burslu")
-        elif dept.scholarship_rate > 0: reasons.append(f"%{dept.scholarship_rate} İndirimli")
-        elif dept.university.uni_type == 'DEVLET': reasons.append("Devlet Üniversitesi")
-        
+        # 3. Burs Durumu
+        if dept.scholarship_rate == 100:
+            reasons.append("💎 Tam Burslu Program")
+        elif dept.scholarship_rate > 0:
+            reasons.append(f"💸 %{dept.scholarship_rate} İndirimli")
+        elif dept.university.uni_type == 'DEVLET':
+            reasons.append("🏛️ Devlet Üniversitesi (Ücretsiz)")
+
+        # 4. Dil
+        if dept.is_english:
+            reasons.append("🌍 İngilizce Eğitim")
+
         return reasons
 
     def post(self, request):
         try:
+            # 1. Girdiler
             ranking = int(request.data.get('student_ranking', 0))
             score_type = request.data.get('score_type', 'SAY')
             city_filter = request.data.get('city_filter', [])
             dept_filter = request.data.get('department_filter', [])
             
+            # String gelirse listeye çevir
             if isinstance(city_filter, str): city_filter = [city_filter]
             if isinstance(dept_filter, str): dept_filter = [dept_filter]
 
-            if ranking <= 0: return Response({"error": "Geçersiz sıralama"}, status=400)
+            if ranking <= 0:
+                return Response({"error": "Sıralama 0'dan büyük olmalıdır."}, status=400)
 
-            # 1. Geniş Havuz (Makası Açtık - En az 50k tarasın)
+            # 2. Geniş Havuz (Volatiliteye göre)
+            # Sıralama ne kadar kötüyse makas o kadar açılır.
             min_limit = 0 
-            # Eğer 1. ise bile 50.000'e kadar baksın ki sonuç dönsün (Garantiler dolsun)
-            max_limit = max(50000, ranking * 2.5) 
+            if ranking < 5000: max_limit = 20000
+            elif ranking < 50000: max_limit = ranking * 2.5
+            else: max_limit = ranking * 2.0
 
             queryset = Department.objects.filter(
                 score_type=score_type,
                 ranking__range=(min_limit, max_limit)
             ).select_related('university', 'university__stats')
 
-            # 2. Akıllı Filtreleme
+            # 3. Akıllı Filtreleme
             if city_filter:
                 query = Q()
                 for city in city_filter:
                     term = self.normalize_tr(city)
-                    if "STANBUL" in term: term = "STANBUL"
+                    if "STANBUL" in term: term = "STANBUL" # İ/I Fix
                     elif "ZMIR" in term: term = "ZMIR"
                     query |= Q(university__city__icontains=term)
                 queryset = queryset.filter(query)
@@ -298,24 +468,27 @@ class TercihMotoruView(APIView):
                 query = Q()
                 for dept in dept_filter:
                     term = self.normalize_tr(dept)
-                    query |= Q(name__icontains=dept)
-                    query |= Q(name__icontains=term)
-                    # Manuel Fixler
+                    query |= Q(name__icontains=dept) # Orjinal
+                    query |= Q(name__icontains=term) # Normalize
+                    # Manuel Fix
                     if "BILGISAYAR" in term: query |= Q(name__icontains="BİLGİSAYAR")
-                    if "YAZILIM" in term: query |= Q(name__icontains="YAZILIM")
-                    if "TIP" in term: query |= Q(name__icontains="TIP")
                 queryset = queryset.filter(query)
 
-            # 3. İşleme
-            programs = list(queryset[:300]) # Max 300 sonuç
+            # 4. Kategorizasyon ve Skorlama
+            # Performans için ilk 300'ü al
+            programs = list(queryset[:300])
+            
             surprise, ideal, safe = [], [], []
 
             for prog in programs:
                 if not prog.ranking: continue
                 
+                # Matematiksel Fark
                 diff = prog.ranking - ranking
-                percent_diff = diff / ranking if ranking > 0 else 0
+                percent_diff = diff / ranking
 
+                # Data Hazırla (Serializer kullanıyoruz veya manuel dict)
+                # Manuel dict daha hızlı ve esnek burada
                 stats = None
                 if hasattr(prog.university, 'stats'):
                     s = prog.university.stats
@@ -325,15 +498,11 @@ class TercihMotoruView(APIView):
                         "city_score": s.city_score
                     }
 
-                # --- FRONTEND İÇİN DÜZELTİLMİŞ DATA YAPISI ---
-                # Frontend 'university_name' bekliyor, 'uni_name' değil!
                 data = {
                     "id": prog.id,
                     "name": prog.name,
                     "program_code": prog.program_code,
-                    
-                    # KRİTİK DÜZELTME:
-                    "university_name": prog.university.name, 
+                    "university_name": prog.university.name,
                     "university_slug": prog.university.slug,
                     "university_city": prog.university.city,
                     "university_type": prog.university.uni_type,
@@ -349,16 +518,23 @@ class TercihMotoruView(APIView):
                     "reasons": self.generate_insights(prog, ranking, city_filter, dept_filter)
                 }
 
-                # Kategorizasyon
-                if -0.25 < percent_diff < 0: surprise.append(data)
-                elif 0 <= percent_diff <= 0.30: ideal.append(data)
-                elif percent_diff > 0.30: safe.append(data)
+                # Kategori Mantığı (Volatilite Bazlı)
+                # Sürpriz: Bölüm daha iyi sıralamada (Negatif fark)
+                if -0.20 < percent_diff < 0: 
+                    surprise.append(data)
                 
-                # Derece öğrencisi (Rank 1-5000) için istisna
-                if ranking < 5000 and prog.ranking < 20000:
+                # İdeal: %25'e kadar gerileme normaldir
+                elif 0 <= percent_diff <= 0.25:
+                    ideal.append(data)
+                
+                # Güvenli: %25'ten sonrası
+                elif percent_diff > 0.25:
+                    safe.append(data)
+                
+                # Derece öğrencisi istisnası
+                if ranking < 5000 and prog.ranking < 10000:
                     if prog.ranking < ranking: surprise.append(data)
-                    elif prog.ranking < ranking + 5000: ideal.append(data)
-                    else: safe.append(data)
+                    else: ideal.append(data)
 
             return Response({
                 "surprise_choices": sorted(surprise, key=lambda x: x['ranking'])[:10],
@@ -371,9 +547,11 @@ class TercihMotoruView(APIView):
 
 class FilterView(views.APIView):
     permission_classes = [AllowAny]
+
     def get(self, request):
         cities = Department.objects.values_list('university__city', flat=True).distinct().order_by('university__city')
         departments = Department.objects.values_list('name', flat=True).distinct().order_by('name')
+
         return Response({
             "cities": sorted(list(set([c for c in cities if c]))),
             "departments": sorted(list(set([d for d in departments if d])))
