@@ -15,7 +15,7 @@ class Feature(models.Model):
         verbose_name = "Özellik / İkon"
         verbose_name_plural = "Özellik Havuzu"
 
-# --- ÜNİVERSİTE MODELİ ---
+# --- ÜNİVERSİTE MODELİ (GÜNCELLENDİ) ---
 class University(models.Model):
     TYPE_CHOICES = [('DEVLET', 'Devlet'), ('VAKIF', 'Vakıf'), ('OZEL', 'Özel'), ('KIBRIS', 'Kıbrıs'), ('YABANCI', 'Yabancı')]
     
@@ -53,22 +53,33 @@ class University(models.Model):
     founded_year = models.IntegerField(null=True, blank=True, verbose_name="Kuruluş Yılı")
     rector = models.CharField(max_length=100, blank=True, verbose_name="Rektör")
     
-    # İstatistikler (Genel)
-    student_count = models.IntegerField(default=0, verbose_name="Toplam Öğrenci Sayısı")
-    academician_count = models.IntegerField(default=0, verbose_name="Toplam Akademisyen Sayısı")
+    # --- İSTATİSTİKLER (GÜNCELLENDİ) ---
+    student_count = models.IntegerField(default=0, verbose_name="Toplam Öğrenci (Sayısal - Sıralama İçin)")
+    # Yeni: "55.000 - 60.000" gibi metinleri tutmak için
+    student_count_label = models.CharField(max_length=100, blank=True, null=True, verbose_name="Öğrenci Sayısı (Etiket)")
+    
+    academician_count = models.IntegerField(default=0, verbose_name="Toplam Akademisyen (Sayısal)")
+    # Yeni: "3.436+" gibi metinleri tutmak için
+    academic_staff_label = models.CharField(max_length=100, blank=True, null=True, verbose_name="Akademisyen Sayısı (Etiket)")
+    
     prof_count = models.IntegerField(default=0, verbose_name="Profesör Sayısı")
     doc_count = models.IntegerField(default=0, verbose_name="Doçent Sayısı")
     dr_count = models.IntegerField(default=0, verbose_name="Dr. Öğr. Üyesi Sayısı")
     
-    education_language = models.CharField(max_length=50, blank=True, null=True, verbose_name="Eğitim Dili")
-    video_url = models.URLField(blank=True, null=True, verbose_name="Tanıtım Videosu (Youtube Embed)")
+    # Eğitim dili için alan genişletildi (Örn: "Ağırlıklı Türkçe..." sığsın diye)
+    education_language = models.CharField(max_length=255, blank=True, null=True, verbose_name="Eğitim Dili")
+    
+    # Yeni: Teknopark
+    technopark = models.CharField(max_length=255, blank=True, null=True, verbose_name="Teknopark Adı")
 
+    video_url = models.URLField(blank=True, null=True, verbose_name="Tanıtım Videosu (Youtube Embed)")
     description = models.TextField(blank=True, verbose_name="Açıklama / Hakkında")
     
     website = models.URLField(blank=True, verbose_name="Web Sitesi")
-    phone = models.CharField(max_length=20, blank=True, verbose_name="Telefon")
+    phone = models.CharField(max_length=50, blank=True, verbose_name="Telefon")
     email = models.EmailField(blank=True, verbose_name="E-posta")
     address = models.TextField(blank=True, verbose_name="Adres")
+    
     map_location = models.CharField(max_length=500, blank=True, verbose_name="Harita Embed Linki")
     
     logo = models.ImageField(upload_to='uni_logos/', blank=True, null=True, verbose_name="Üniversite Logosu")
@@ -485,7 +496,7 @@ class CampusReel(models.Model):
     university = models.ForeignKey(
         University, 
         on_delete=models.SET_NULL, 
-        null=True, 
+        null=True,  
         blank=True, 
         related_name='reels', 
         verbose_name="İlgili Üniversite"

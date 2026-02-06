@@ -53,16 +53,19 @@ class SystemWarmupView(views.APIView):
         detailed_logs = ""
         
         try:
+            # 1. MIGRATION (Veritabanı Güncelleme)
             out_migrate = io.StringIO()
             call_command('migrate', interactive=False, stdout=out_migrate)
             status_report.append("✅ Veritabanı (Migration) güncellendi.")
             detailed_logs += f"--- MIGRATE LOG ---\n{out_migrate.getvalue()}\n"
 
+            # 2. DOSYA KONTROLÜ (OSYM)
             file_path = os.path.join(settings.BASE_DIR, 'osym_data.csv')
             if not os.path.exists(file_path):
                 return Response({"status": "error", "message": "Dosya Yok"}, status=200)
-            status_report.append("✅ Dosya Mevcut")
+            status_report.append("✅ ÖSYM Dosyası Mevcut")
 
+            # 3. VERİ YÜKLEME (OSYM)
             out_load = io.StringIO()
             try:
                 call_command('load_osym_data', stdout=out_load, stderr=out_load)
@@ -72,6 +75,7 @@ class SystemWarmupView(views.APIView):
             
             detailed_logs += f"\n--- LOAD LOG ---\n{out_load.getvalue()}\n"
 
+            # 4. TÜMA VERİLERİ
             tuma_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
             if os.path.exists(tuma_path):
                 out_tuma = io.StringIO()
@@ -82,6 +86,18 @@ class SystemWarmupView(views.APIView):
                     status_report.append(f"❌ TÜMA Hatası: {str(e)}")
                 
                 detailed_logs += f"\n--- TUMA LOG ---\n{out_tuma.getvalue()}\n"
+
+            # 5. ÜNİVERSİTE DETAYLARI (VİDEO/HARİTA/INFO) - YENİ EKLENDİ
+            detail_path = os.path.join(settings.BASE_DIR, 'universite_info.csv')
+            if os.path.exists(detail_path):
+                out_detail = io.StringIO()
+                try:
+                    call_command('load_uni_details', stdout=out_detail, stderr=out_detail)
+                    status_report.append("✅ Üniversite Detayları (Video/Harita) Güncellendi.")
+                except Exception as e:
+                    status_report.append(f"❌ Detay Yükleme Hatası: {str(e)}")
+                
+                detailed_logs += f"\n--- DETAY LOG ---\n{out_detail.getvalue()}\n"
             
             return Response({
                 "status": "success",
@@ -305,8 +321,6 @@ class TercihMotoruView(APIView):
             programs = list(queryset[:300])
 
             # --- STATS FIX: TÜM İSTATİSTİKLERİ HAFIZAYA AL ---
-            # Related_name karmaşasından kurtulmak için en temiz yöntem.
-            # ID bazlı eşleştirme yapıyoruz.
             all_stats = UniversityStats.objects.all()
             stats_map = {s.university_id: s for s in all_stats}
 

@@ -5,11 +5,11 @@ from .models import (
     Department, Dormitory, DormitoryDistance, DormitoryImage, 
     StudentHouse, HouseImage, FavoriteStudentHouse, 
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
-    UniversityStats, UniversityAnalytics, DepartmentStats, Lead, # UniversityAnalytics EKLENDİ
+    UniversityStats, UniversityAnalytics, DepartmentStats, Lead, 
     StudentHouseConnection, Promotion, Review, CampusReel
 )
 
-# --- 1. ÖNCE CAMPUS REEL ---
+# --- 1. CAMPUS REEL (VİDEO GALERİ) ---
 @admin.register(CampusReel)
 class CampusReelAdmin(admin.ModelAdmin):
     list_display = ('title', 'university', 'show_on_homepage', 'created_at')
@@ -21,7 +21,6 @@ class CampusReelAdmin(admin.ModelAdmin):
 
 # --- 2. YARDIMCI (INLINE) MODELLER ---
 
-# YENİ: Kalite Puanlarını Üniversite sayfasının içinde göstermek için
 class UniversityStatsInline(admin.StackedInline):
     model = UniversityStats
     can_delete = False
@@ -96,14 +95,14 @@ class FeatureAdmin(admin.ModelAdmin):
 
 @admin.register(University)
 class UniversityAdmin(admin.ModelAdmin):
-    list_display = ('name', 'city', 'uni_type', 'is_promoted', 'student_count')
+    list_display = ('name', 'city', 'uni_type', 'is_promoted', 'student_count_label')
     list_editable = ('is_promoted',) 
     list_filter = ('is_promoted', 'city', 'uni_type')
     search_fields = ('name', 'slug', 'city') 
     prepopulated_fields = {'slug': ('name',)}
     
     inlines = [
-        UniversityStatsInline, # YENİ EKLENDİ: Puanları buradan yönet
+        UniversityStatsInline, 
         UniversityImageInline, 
         CampusVenueInline, 
         DepartmentInline, 
@@ -111,11 +110,31 @@ class UniversityAdmin(admin.ModelAdmin):
         StudentHouseConnectionInline
     ]
     
-    fields = (
-        'name', 'slug', 'city', 'uni_type', 'is_promoted', 'logo', 'cover_image',
-        'founded_year', 'student_count', 'academician_count', 'prof_count', 'doc_count', 'dr_count', 'education_language',
-        'website', 'phone', 'email', 'address', 'map_location', 'video_url',
-        'description', 'features', 'admin_user'
+    # Alanları Gruplandırma (Fieldsets)
+    # GÜNCELLEME: Prof/Doc/Dr alanları buradan KALDIRILDI.
+    fieldsets = (
+        ('Temel Bilgiler', {
+            'fields': (
+                'name', 'slug', 'city', 'uni_type', 'is_promoted', 
+                'logo', 'cover_image', 'founded_year', 'rector', 'technopark'
+            )
+        }),
+        ('İstatistikler ve Sayılar', {
+            'fields': (
+                'student_count_label', 'student_count', 
+                'academic_staff_label', 'academician_count', # Sadece toplam sayı
+                'education_language'
+            )
+        }),
+        ('İletişim ve Adres', {
+            'fields': ('website', 'phone', 'email', 'address')
+        }),
+        ('Medya ve İçerik', {
+            'fields': (
+                'map_location', 'video_url', 'description', 
+                'features', 'admin_user'
+            )
+        }),
     )
 
 @admin.register(CampusVenue)
@@ -197,17 +216,12 @@ class LeadAdmin(admin.ModelAdmin):
     list_filter = ('lead_type', 'is_read', 'created_at')
     readonly_fields = ('created_at', 'ip_address')
 
-# --- YENİLENEN İSTATİSTİK ADMINLERİ ---
-
-# 1. TÜMA Puanları (Artık date/page_views yok)
 @admin.register(UniversityStats)
 class UniversityStatsAdmin(admin.ModelAdmin):
     list_display = ('university', 'academic_score', 'campus_score', 'career_score', 'source')
     search_fields = ('university__name',)
     list_filter = ('source',)
-    # readonly_fields BURADAN KALDIRILDI çünkü date/page_views artık bu modelde değil
 
-# 2. Günlük Trafik Analizi (YENİ - Hata veren alanlar buraya taşındı)
 @admin.register(UniversityAnalytics)
 class UniversityAnalyticsAdmin(admin.ModelAdmin):
     list_display = ('university', 'date', 'page_views', 'website_clicks')
@@ -220,7 +234,6 @@ class DepartmentStatsAdmin(admin.ModelAdmin):
     list_display = ('department', 'date', 'page_views')
     readonly_fields = ('department', 'date', 'page_views')
 
-# Favorileri sadece listede görelim
 admin.site.register(FavoriteUniversity)
 admin.site.register(FavoriteDormitory)
 admin.site.register(FavoriteStudentHouse)
