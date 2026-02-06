@@ -7,7 +7,6 @@ from .models import (
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
     UniversityStats, UniversityAnalytics, DepartmentStats, Lead, 
     StudentHouseConnection, Promotion, Review, CampusReel
-    # City modelini bilerek sildik, çünkü model dosyanızda yok.
 )
 
 # --- 1. YARDIMCI (INLINE) MODELLER ---
@@ -36,13 +35,6 @@ class CampusVenueInline(admin.TabularInline):
     model = CampusVenue
     extra = 0
     fields = ('name', 'venue_type', 'rating', 'distance', 'is_sponsored', 'image')
-
-class DepartmentInline(admin.TabularInline):
-    model = Department
-    extra = 0
-    fields = ('program_code', 'name', 'faculty', 'score_type', 'quota', 'base_score')
-    show_change_link = True
-    classes = ['collapse']
 
 class DormitoryDistanceInline(admin.TabularInline):
     model = DormitoryDistance
@@ -109,20 +101,15 @@ class UniversityAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug', 'city') 
     prepopulated_fields = {'slug': ('name',)}
     
-    # Inline (İç içe) Modeller
-    # NOT: Eğer bunlardan biri hata verirse, modelde Foreign Key eksiktir.
-    # Şimdilik güvenli olanları açıyoruz.
+    # --- BURAYA DİKKAT ---
+    # Sadece sistemi yormayan, az verili olanları burada gösteriyoruz.
+    # Bölümler (Department) buradan kalktı ama sol menüde duruyor.
     inlines = [
         UniversityStatsInline, 
         UniversityImageInline, 
         CampusVenueInline, 
-        DepartmentInline, 
-        # DormitoryDistanceInline,      # Hata riskine karşı kapalı (Modelde ilişki yoksa patlar)
-        # StudentHouseConnectionInline  # Hata riskine karşı kapalı
+        # DepartmentInline,  <-- Bunu kapattık ki sayfa çökmesin.
     ]
-    
-    # fieldsets KALDIRILDI -> 500 Hatasını çözen hamle budur.
-    # Django artık modelde ne varsa onu otomatik gösterecek.
 
 @admin.register(CampusVenue)
 class CampusVenueAdmin(admin.ModelAdmin):
@@ -133,11 +120,12 @@ class CampusVenueAdmin(admin.ModelAdmin):
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
+    # Bölümleri yönetmek için BURAYI kullanacaksınız.
     list_display = ('program_code', 'university', 'name', 'faculty', 'score_type', 'quota', 'base_score')
     list_filter = ('score_type', 'university__city', 'education_type', 'language')
     search_fields = ('name', 'program_code', 'university__name', 'faculty')
     autocomplete_fields = ['university']
-    list_per_page = 50
+    list_per_page = 50 # Sayfalama yaparak çökmesini engeller
 
 @admin.register(Dormitory)
 class DormitoryAdmin(admin.ModelAdmin):
@@ -158,7 +146,7 @@ class StudentHouseAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('title',)}
     inlines = [HouseImageInline] 
     filter_horizontal = ('features',)
-
+    
 @admin.register(Scholarship)
 class ScholarshipAdmin(admin.ModelAdmin):
     list_display = ('title', 'provider', 'amount', 'deadline', 'is_active')
