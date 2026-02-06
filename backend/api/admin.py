@@ -3,31 +3,33 @@ from .models import (
     University, UniversityStats, Department, 
     Feature, CampusVenue, UniversityImage,
     Dormitory, StudentHouse, Scholarship, News
-    # Hata veren diğer modelleri şimdilik çağırmıyoruz
 )
 
-# --- SADECE TEMEL AYARLAR ---
-
+# --- 1. SADELEŞTİRİLMİŞ ÜNİVERSİTE YÖNETİMİ ---
 @admin.register(University)
 class UniversityAdmin(admin.ModelAdmin):
-    # Sadece veritabanında kesin var olan alanları listeliyoruz
+    # Sadece en temel, hata vermesi imkansız alanlar
     list_display = ('name', 'city', 'uni_type')
     search_fields = ('name',)
     
-    # Detay sayfasına girince HİÇBİR EKSTRA KUTU (Inline) açmıyoruz.
-    # Böylece "Hatalı alan", "Hatalı ilişki" riski sıfırlanıyor.
-    inlines = []
+    # KESİN ÇÖZÜM: Inline'ların hepsini kapattık.
+    # Sayfa artık çökmeyecek. 
+    inlines = [] 
+
+# --- 2. DİĞER MODELLER (Hata veren satırlar temizlendi) ---
+
+@admin.register(UniversityStats)
+class UniversityStatsAdmin(admin.ModelAdmin):
+    # HATA VEREN 'general_score' alanını kaldırdım.
+    # Sadece 'university' ve 'source' gösteriyoruz, bunlar kesin var.
+    list_display = ('university', 'source') 
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
     list_display = ('name', 'university', 'program_code')
     search_fields = ('name', 'program_code')
 
-@admin.register(UniversityStats)
-class UniversityStatsAdmin(admin.ModelAdmin):
-    list_display = ('university', 'academic_score', 'general_score')
-
-# Diğer modellerin basit kayıtları
+# --- 3. DİĞER BASİT KAYITLAR ---
 admin.site.register(Feature)
 admin.site.register(CampusVenue)
 admin.site.register(UniversityImage)
