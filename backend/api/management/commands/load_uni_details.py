@@ -72,7 +72,7 @@ class Command(BaseCommand):
                 target_uni = uni_map.get(search_key)
                 
                 if not target_uni:
-                    matches = difflib.get_close_matches(search_key, db_keys, n=1, cutoff=0.4)
+                    matches = difflib.get_close_matches(search_key, db_keys, n=1, cutoff=0.2)
                     if matches:
                         target_uni = uni_map[matches[0]]
 
