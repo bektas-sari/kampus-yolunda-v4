@@ -416,10 +416,31 @@ class News(models.Model):
     
     def __str__(self): return self.title
     
+# models.py içine eklenecek DÜZELTİLMİŞ save metodu:
+    
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = f"{slugify(self.title)}-{str(uuid.uuid4())[:8]}"
-        super().save(*args, **kwargs)
+        def parse_count_local(text):
+            if not text: return 0
+            try:
+                # ÖNCE noktaları temizle (Böylece 3.436 -> 3436 olur)
+                clean_text = str(text).replace('.', '')
+                
+                # SONRA sayıları bul
+                nums = [int(s) for s in re.findall(r'\d+', clean_text)]
+                
+                if not nums: return 0
+                return int(sum(nums) / len(nums))
+            except:
+                return 0
+
+        # Otomatik Hesaplama
+        if self.student_count == 0 and self.student_count_label:
+            self.student_count = parse_count_local(self.student_count_label)
+            
+        if self.academician_count == 0 and self.academic_staff_label:
+            self.academician_count = parse_count_local(self.academic_staff_label)
+            
+        super(University, self).save(*args, **kwargs)
 
 # --- LEAD (FORM BAŞVURULARI) ---
 class Lead(models.Model):
