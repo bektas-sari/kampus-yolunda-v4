@@ -1,29 +1,46 @@
 import csv
 import os
 import re
-import difflib  # <--- SİHİRLİ KÜTÜPHANE BU
+import difflib
 from django.core.management.base import BaseCommand
 from api.models import University
 from django.conf import settings
 
 class Command(BaseCommand):
-    help = 'CSV dosyasından Üniversite Detaylarını Yükler (Fuzzy Matching ile)'
+    help = 'CSV dosyasından Üniversite Detaylarını Yükler (Süper Normalize Modu)'
 
     def normalize_name(self, text):
-        """ İsimleri basitleştirir (Koc Univ -> koc) """
+        """ İsimleri en saf haline ("ege", "yasar") getirir. """
         if not text: return ""
-        text = text.lower()
-        # Türkçe karakterleri İngilizce karşılıklarına çevir
-        tr_map = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ç': 'c', 'ğ': 'g', 'İ': 'i', 'I': 'i'}
-        for k, v in tr_map.items():
+        
+        # 1. Ön Temizlik (BOM ve Boşluk)
+        text = text.replace('\ufeff', '').strip()
+        
+        # 2. Türkçe Karakterleri Manuel Düzelt (Lower yapmadan ÖNCE)
+        # Bu sayede "İ" -> "i" olur, "I" -> "i" olur. Karışıklık kalmaz.
+        rep = {
+            'İ': 'i', 'I': 'i', 'ı': 'i', 
+            'Ş': 's', 'ş': 's', 
+            'Ğ': 'g', 'ğ': 'g', 
+            'Ü': 'u', 'ü': 'u', 
+            'Ö': 'o', 'ö': 'o', 
+            'Ç': 'c', 'ç': 'c'
+        }
+        for k, v in rep.items():
             text = text.replace(k, v)
         
-        # Parantez içindeki kısaltmaları sil (İYTE vb.)
-        text = re.sub(r'\s*\(.*?\)', '', text)
+        text = text.lower()
         
-        # "universitesi", "universite" gibi kelimeleri de atalım ki "koc" == "koc" kalsın
-        text = text.replace('universitesi', '').replace('universite', '').replace('yuksek', '').replace('teknoloji', '').replace('enstitusu', '')
-        
+        # 3. Fazlalıkları At
+        garbage = [
+            'universitesi', 'universite', 'yuksek', 'teknoloji', 'enstitusu', 
+            'vakif', 'devlet', 'univ', 'uni', '.', 't.c.'
+        ]
+        for g in garbage:
+            text = text.replace(g, '')
+            
+        # 4. Noktalama İşaretlerini ve Çift Boşlukları Temizle
+        text = re.sub(r'[^\w\s]', '', text)
         return " ".join(text.split())
 
     def parse_count(self, text):
@@ -47,51 +64,42 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Dosya bulunamadı: {file_path}"))
             return
 
-        self.stdout.write("🚀 Üniversite Detayları Güncelleniyor (Fuzzy Mod)...")
+        self.stdout.write("🚀 Üniversite Detayları Güncelleniyor (Süper Normalize)...")
         
-        # 1. Veritabanındaki Üniversiteleri Hazırla
+        # Veritabanı isimlerini hazırla
         db_unis = list(University.objects.all())
-        # Harita: {'ege': <UniObj>, 'dokuz eylul': <UniObj>}
         uni_map = {self.normalize_name(u.name): u for u in db_unis}
-        
-        # Anahtarların listesi (Matching için)
         db_keys = list(uni_map.keys())
 
         updated_count = 0
         not_found_count = 0
         
-        with open(file_path, 'r', encoding='utf-8') as f:
+        # utf-8-sig: Excel CSV'lerindeki gizli karakterleri (BOM) çözer
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             
             for row in reader:
                 raw_name = row['universite'].strip()
                 search_key = self.normalize_name(raw_name)
                 
-                target_uni = None
+                target_uni = uni_map.get(search_key)
                 
-                # A) Tam Eşleşme Dene
-                if search_key in uni_map:
-                    target_uni = uni_map[search_key]
-                else:
-                    # B) Yaklaşık Eşleşme (Fuzzy) Dene
-                    # cutoff=0.4 demek %40 benzerlik yeterli demek (Çok esnek)
+                # Fuzzy Match (Esnek Arama)
+                if not target_uni:
                     matches = difflib.get_close_matches(search_key, db_keys, n=1, cutoff=0.4)
                     if matches:
-                        match_key = matches[0]
-                        target_uni = uni_map[match_key]
-                        # self.stdout.write(f"🔗 Eşleşti: '{raw_name}' -> '{target_uni.name}'")
+                        target_uni = uni_map[matches[0]]
+                        # self.stdout.write(f"🔗 Esnek Eşleşme: CSV({search_key}) -> DB({matches[0]})")
 
                 if target_uni:
-                    # --- GÜNCELLEME ---
+                    # GÜNCELLEME İŞLEMLERİ
                     if row['kurulus_yili']:
                         target_uni.founded_year = int(row['kurulus_yili'])
                     
                     target_uni.student_count_label = row['toplam_ogrenci']
                     target_uni.student_count = self.parse_count(row['toplam_ogrenci'])
-                    
                     target_uni.academic_staff_label = row['toplam_akademisyen']
                     target_uni.academician_count = self.parse_count(row['toplam_akademisyen'])
-                    
                     target_uni.education_language = row['egitim_dili']
                     target_uni.website = self.normalize_url(row['web'])
                     target_uni.phone = row['telefon']
@@ -105,7 +113,12 @@ class Command(BaseCommand):
                     target_uni.save()
                     updated_count += 1
                 else:
-                    self.stdout.write(self.style.WARNING(f"⚠️ HİÇ BULUNAMADI: {raw_name} (Aranan: {search_key})"))
+                    # HATA RAPORU: Neden bulunamadı?
+                    # DB'deki en yakın 3 ismi gösterelim
+                    guesses = difflib.get_close_matches(search_key, db_keys, n=3, cutoff=0.1)
+                    self.stdout.write(self.style.WARNING(f"⚠️ BULUNAMADI: {raw_name}"))
+                    self.stdout.write(f"   Aranan Kök: '{search_key}'")
+                    self.stdout.write(f"   DB'deki En Yakın Adaylar: {guesses}")
                     not_found_count += 1
 
-        self.stdout.write(self.style.SUCCESS(f"🏁 İŞLEM TAMAM: {updated_count} üniversite güncellendi."))
+        self.stdout.write(self.style.SUCCESS(f"🏁 SONUÇ: {updated_count} Güncellendi, {not_found_count} Kayıp."))
