@@ -95,6 +95,11 @@ class Command(BaseCommand):
                     # GÜNCELLEME İŞLEMLERİ
                     if row['kurulus_yili']:
                         target_uni.founded_year = int(row['kurulus_yili'])
+
+                    # --- YENİ EKLENEN KISIM ---
+                    if 'rektor' in row:
+                        target_uni.rector = row['rektor']
+                    # --------------------------
                     
                     target_uni.student_count_label = row['toplam_ogrenci']
                     target_uni.student_count = self.parse_count(row['toplam_ogrenci'])
@@ -112,13 +117,4 @@ class Command(BaseCommand):
                     
                     target_uni.save()
                     updated_count += 1
-                else:
-                    # HATA RAPORU: Neden bulunamadı?
-                    # DB'deki en yakın 3 ismi gösterelim
-                    guesses = difflib.get_close_matches(search_key, db_keys, n=3, cutoff=0.1)
-                    self.stdout.write(self.style.WARNING(f"⚠️ BULUNAMADI: {raw_name}"))
-                    self.stdout.write(f"   Aranan Kök: '{search_key}'")
-                    self.stdout.write(f"   DB'deki En Yakın Adaylar: {guesses}")
-                    not_found_count += 1
-
         self.stdout.write(self.style.SUCCESS(f"🏁 SONUÇ: {updated_count} Güncellendi, {not_found_count} Kayıp."))
