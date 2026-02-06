@@ -6,8 +6,7 @@ from .models import (
     StudentHouse, HouseImage, FavoriteStudentHouse, 
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
     UniversityStats, UniversityAnalytics, DepartmentStats, Lead, 
-    StudentHouseConnection, Promotion, Review, CampusReel
-)
+    StudentHouseConnection, Promotion, Review, CampusReel, City
 
 # --- 1. CAMPUS REEL (VİDEO GALERİ) ---
 @admin.register(CampusReel)
@@ -25,7 +24,22 @@ class UniversityStatsInline(admin.StackedInline):
     model = UniversityStats
     can_delete = False
     verbose_name_plural = 'Kalite Puanları (TÜMA)'
-    classes = ['collapse']
+    fk_name = 'university'
+    # İşte eksik olan kısım burasıydı (Hangi alanlar görünecek?):
+    fields = (
+        ('general_score', 'academic_score', 'campus_score'),
+        ('social_score', 'career_score', 'tech_score'),
+        ('city_score', 'source')
+    )
+    readonly_fields = ('source',) # Kaynağı elle değiştirmeyelim
+    extra = 0
+
+class UniversityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'city', 'type', 'student_count', 'founded_year')
+    search_fields = ('name',)
+    list_filter = ('city', 'type')
+
+    inlines = [UniversityStatsInline]
 
 class UniversityImageInline(admin.TabularInline):
     model = UniversityImage
@@ -237,3 +251,6 @@ class DepartmentStatsAdmin(admin.ModelAdmin):
 admin.site.register(FavoriteUniversity)
 admin.site.register(FavoriteDormitory)
 admin.site.register(FavoriteStudentHouse)
+admin.site.register(University, UniversityAdmin)
+admin.site.register(Department)
+admin.site.register(City)

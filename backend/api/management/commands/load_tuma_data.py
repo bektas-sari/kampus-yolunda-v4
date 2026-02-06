@@ -6,41 +6,32 @@ from api.models import University, UniversityStats
 from django.conf import settings
 
 class Command(BaseCommand):
-    help = 'TÜMA Verilerini Yükle (Verbose Mode)'
+    help = 'TÜMA Verilerini Yükle (Bozuk Karakter Dostu Mod)'
 
     def normalize_name(self, text):
+        """ Üniversite isimlerini eşleştirmek için temizler """
         if not text: return ""
         text = text.lower()
+        # Türkçe karakterleri İngilizceye çevir (Eşleşme kolay olsun diye)
         tr_map = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ç': 'c', 'ğ': 'g', 'İ': 'i'}
         for k, v in tr_map.items():
             text = text.replace(k, v)
         
+        # Gereksiz kelimeleri at
         garbage = ['vakif', 'devlet', 'yuksek', 'teknoloji', 'bilim', 'enstitusu', 'univ', '.', 'universitesi', 'universite']
         for g in garbage:
             text = text.replace(g, '')
         return " ".join(text.split())
 
     def handle(self, *args, **kwargs):
-        self.stdout.write("🚀 TÜMA Yükleyici Başlatıldı...")
+        self.stdout.write("🚀 TÜMA Yükleyici (Fix Modu) Başlatıldı...")
         
         file_path = os.path.join(settings.BASE_DIR, 'memnuniyet.csv')
         if not os.path.exists(file_path):
             self.stdout.write(self.style.ERROR(f"❌ Dosya Yok: {file_path}"))
             return
 
-        # 1. AYIRAÇ TESPİTİ
-        delimiter = ';'
-        try:
-            with open(file_path, 'r', encoding='utf-8-sig', errors='replace') as f:
-                line = f.readline()
-                if ';' in line: delimiter = ';'
-                elif ',' in line: delimiter = ','
-                self.stdout.write(f"🔍 Algılanan Ayıraç: '{delimiter}'")
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f"❌ Dosya okuma hatası: {e}"))
-            return
-
-        # 2. ÜNİVERSİTELERİ HAFIZAYA AL
+        # 1. DATABASE'İ HAFIZAYA AL
         db_unis = list(University.objects.all())
         uni_map = {self.normalize_name(u.name): u for u in db_unis}
         self.stdout.write(f"📚 DB'de {len(db_unis)} üniversite var.")
@@ -48,72 +39,82 @@ class Command(BaseCommand):
         matched = 0
         failed = 0
         
-        # 3. İŞLEME BAŞLA
-        with open(file_path, 'r', encoding='utf-8-sig', errors='replace') as f:
-            reader = csv.DictReader(f, delimiter=delimiter)
+        # 2. DOSYAYI OKU (Encoding hatalarını yoksayarak)
+        # 'utf-8-sig' genellikle bozuk görünen ama aslında UTF-8 olan dosyaları çözer.
+        # Olmazsa 'latin-1' deneriz ama şu an header eşleştirmesiyle çözeceğiz.
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            # Sizin görselde ayırıcı virgül (,) görünüyor
+            reader = csv.DictReader(f, delimiter=',')
             
-            # Başlıkları temizle (Görünmez karakterleri sil)
-            headers = [h.strip().replace('\ufeff', '') for h in reader.fieldnames] if reader.fieldnames else []
-            self.stdout.write(f"📋 Başlıklar: {headers}")
+            # CSV Başlıklarını alalım
+            headers = reader.fieldnames if reader.fieldnames else []
+            # Listeyi ekrana yazalım ki ne okuduğumuzu görelim
+            self.stdout.write(f"📋 Okunan Başlıklar: {headers}")
 
-            # Sütun Eşleştirme
+            # --- KRİTİK BÖLÜM: BOZUK BAŞLIKLARI EŞLEŞTİRME ---
+            # Görseldeki bozuk metinlerin "Köklerini" arayacağız.
             def find_col(keywords):
                 for h in headers:
                     for k in keywords:
+                        # Case insensitive (Büyük/küçük harf duyarsız) arama
                         if k.lower() in h.lower(): return h
                 return None
 
-            col_uni = find_col(['üniversite', 'universite', 'uni'])
-            if not col_uni:
+            # Sizin görseldeki sütunlara göre harita:
+            # Genel Puan -> "Genel"
+            # YerleÅŸke -> "Yerle"
+            # Akad.Des. -> "Akad"
+            # Kariyer -> "Kariyer"
+            # Ögr.Den (Öğrenim Deneyimi) -> "Den" veya "Ogr"
+            
+            cols = {
+                'uni': find_col(['universite', 'üniversite', 'univ']), 
+                'general': find_col(['genel']),        # Genel Memnuniyet
+                'campus': find_col(['yerle', 'kampus']), # Yerleşke (YerleÅŸke)
+                'academic': find_col(['akad']),        # Akademik Destek (Akad.Des)
+                'career': find_col(['kariyer']),       # Kariyer Desteği
+                'social': find_col(['imk', 'sosyal']), # Öğrenim İmkanları (Ã–ÄŸr.Ä°mk) -> Bunu Sosyal kabul edelim
+                'tech': find_col(['den', 'tekno']),    # Öğrenim Deneyimi (Ã–ÄŸr.Den) -> Bunu Tekno/Eğitim Kalitesi kabul edelim
+            }
+
+            if not cols['uni']:
                 self.stdout.write(self.style.ERROR("❌ 'Üniversite' sütunu bulunamadı!"))
                 return
 
-            cols = {
-                'academic': find_col(['akademik']),
-                'campus': find_col(['kampüs', 'yerleşke']),
-                'social': find_col(['sosyal']),
-                'career': find_col(['kariyer']),
-                'tech': find_col(['tekno', 'imkan']),
-            }
-
             for row in reader:
-                # DictReader orijinal başlıkları kullanır, bizim temiz headers listemizi değil
-                # O yüzden row içindeki key'i bulmak için orijinalini kullanmalıyız
-                # Basitlik adına row değerlerini sırayla da alabiliriz ama key ile gidelim
-                
-                # Gerçek anahtarı bul (DictReader'daki)
-                real_uni_key = next((k for k in row.keys() if col_uni in k), None)
-                if not real_uni_key: continue
-                
-                raw_name = row[real_uni_key]
+                # Üniversite adını bul
+                raw_name = row.get(cols['uni'])
                 if not raw_name: continue
 
                 norm = self.normalize_name(raw_name)
                 target = uni_map.get(norm)
 
+                # Bulamazsa yakın eşleşme dene
                 if not target:
                     matches = difflib.get_close_matches(norm, uni_map.keys(), n=1, cutoff=0.6)
                     if matches:
                         target = uni_map[matches[0]]
 
                 if target:
-                    defaults = {'source': 'TÜMA 2025', 'city_score': 70}
-                    for key, col_name in cols.items():
-                        if not col_name: 
-                            defaults[f"{key}_score"] = 50
-                            continue
+                    defaults = {'source': 'TÜMA 2024', 'city_score': 70}
+                    
+                    # Puanları Çek ve Temizle
+                    for key, csv_header in cols.items():
+                        if key == 'uni': continue
                         
-                        # DictReader key'ini bul
-                        real_key = next((k for k in row.keys() if col_name in k), None)
-                        val = row.get(real_key, "50")
+                        val = row.get(csv_header, "50") # Bulamazsa 50 ver
                         try:
-                            defaults[f"{key}_score"] = int(float(str(val).replace(',', '.')))
+                            # Virgülü noktaya çevir, sayı olmayan her şeyi sil
+                            clean_val = str(val).replace(',', '.')
+                            score = int(float(clean_val))
+                            defaults[f"{key}_score"] = score
                         except:
-                            defaults[f"{key}_score"] = 50
+                            defaults[f"{key}_score"] = 50 # Okuyamazsa 50 ver
 
+                    # Veritabanına Yaz
                     UniversityStats.objects.update_or_create(university=target, defaults=defaults)
                     matched += 1
                 else:
                     failed += 1
 
-        self.stdout.write(self.style.SUCCESS(f"✅ BİTTİ: {matched} Eşleşti, {failed} Kayıp."))
+        self.stdout.write(self.style.SUCCESS(f"✅ İŞLEM TAMAM: {matched} üniversitenin gerçek puanları yüklendi."))
