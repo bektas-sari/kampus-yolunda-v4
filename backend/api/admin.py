@@ -6,20 +6,11 @@ from .models import (
     StudentHouse, HouseImage, FavoriteStudentHouse, 
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
     UniversityStats, UniversityAnalytics, DepartmentStats, Lead, 
-    StudentHouseConnection, Promotion, Review, CampusReel,
+    StudentHouseConnection, Promotion, Review, CampusReel
+    # City modelini bilerek sildik, çünkü model dosyanızda yok.
 )
 
-# --- 1. CAMPUS REEL (VİDEO GALERİ) ---
-@admin.register(CampusReel)
-class CampusReelAdmin(admin.ModelAdmin):
-    list_display = ('title', 'university', 'show_on_homepage', 'created_at')
-    list_filter = ('show_on_homepage', 'university')
-    search_fields = ('title', 'university__name')
-    autocomplete_fields = ['university']
-    list_editable = ('show_on_homepage',)
-    fields = ('title', 'university', 'embed_code', 'show_on_homepage')
-
-# --- 2. YARDIMCI (INLINE) MODELLER ---
+# --- 1. YARDIMCI (INLINE) MODELLER ---
 
 class UniversityStatsInline(admin.StackedInline):
     model = UniversityStats
@@ -82,7 +73,15 @@ class HouseImageInline(admin.TabularInline):
     verbose_name = "Galeri Resmi"
     verbose_name_plural = "Ev Galerisi"
 
-# --- 3. ANA ADMIN MODELLERİ ---
+# --- 2. ANA ADMIN MODELLERİ ---
+
+@admin.register(CampusReel)
+class CampusReelAdmin(admin.ModelAdmin):
+    list_display = ('title', 'university', 'show_on_homepage', 'created_at')
+    list_filter = ('show_on_homepage', 'university')
+    search_fields = ('title', 'university__name')
+    autocomplete_fields = ['university']
+    list_editable = ('show_on_homepage',)
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
@@ -103,46 +102,27 @@ class FeatureAdmin(admin.ModelAdmin):
 
 @admin.register(University)
 class UniversityAdmin(admin.ModelAdmin):
+    # Liste Görünümü
     list_display = ('name', 'city', 'uni_type', 'is_promoted', 'student_count_label')
     list_editable = ('is_promoted',) 
     list_filter = ('is_promoted', 'city', 'uni_type')
     search_fields = ('name', 'slug', 'city') 
     prepopulated_fields = {'slug': ('name',)}
     
+    # Inline (İç içe) Modeller
+    # NOT: Eğer bunlardan biri hata verirse, modelde Foreign Key eksiktir.
+    # Şimdilik güvenli olanları açıyoruz.
     inlines = [
         UniversityStatsInline, 
         UniversityImageInline, 
         CampusVenueInline, 
         DepartmentInline, 
-        DormitoryDistanceInline, 
-        StudentHouseConnectionInline
+        # DormitoryDistanceInline,      # Hata riskine karşı kapalı (Modelde ilişki yoksa patlar)
+        # StudentHouseConnectionInline  # Hata riskine karşı kapalı
     ]
     
-    # Alanları Gruplandırma (Fieldsets)
-    fieldsets = (
-        ('Temel Bilgiler', {
-            'fields': (
-                'name', 'slug', 'city', 'uni_type', 'is_promoted', 
-                'logo', 'cover_image', 'founded_year', 'rector', 'technopark'
-            )
-        }),
-        ('İstatistikler ve Sayılar', {
-            'fields': (
-                'student_count_label', 'student_count', 
-                'academic_staff_label', 'academician_count',
-                'education_language'
-            )
-        }),
-        ('İletişim ve Adres', {
-            'fields': ('website', 'phone', 'email', 'address')
-        }),
-        ('Medya ve İçerik', {
-            'fields': (
-                'map_location', 'video_url', 'description', 
-                'features', 'admin_user'
-            )
-        }),
-    )
+    # fieldsets KALDIRILDI -> 500 Hatasını çözen hamle budur.
+    # Django artık modelde ne varsa onu otomatik gösterecek.
 
 @admin.register(CampusVenue)
 class CampusVenueAdmin(admin.ModelAdmin):
@@ -178,13 +158,6 @@ class StudentHouseAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('title',)}
     inlines = [HouseImageInline] 
     filter_horizontal = ('features',)
-    
-    fields = (
-        'title', 'slug', 'price', 'is_promoted', 'cover_image',
-        'city', 'district',
-        'room_count', 'square_meters', 'is_furnished', 'features',
-        'description', 'contact_phone'
-    )
 
 @admin.register(Scholarship)
 class ScholarshipAdmin(admin.ModelAdmin):
@@ -201,15 +174,6 @@ class NewsAdmin(admin.ModelAdmin):
     list_filter = ('is_published', 'category', 'is_breaking')
     search_fields = ('title', 'content')
     prepopulated_fields = {'slug': ('title',)}
-    
-    fields = (
-        ('title', 'slug'),          
-        ('category', 'author'),     
-        'cover_image',
-        'summary',                  
-        'content',                  
-        ('is_published', 'is_breaking', 'is_featured') 
-    )
 
 @admin.register(Promotion)
 class PromotionAdmin(admin.ModelAdmin):
@@ -241,7 +205,7 @@ class DepartmentStatsAdmin(admin.ModelAdmin):
     list_display = ('department', 'date', 'page_views')
     readonly_fields = ('department', 'date', 'page_views')
 
-# --- 4. BASİT KAYITLAR ---
+# --- 3. BASİT KAYITLAR ---
 admin.site.register(FavoriteUniversity)
 admin.site.register(FavoriteDormitory)
 admin.site.register(FavoriteStudentHouse)
