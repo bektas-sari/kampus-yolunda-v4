@@ -4,9 +4,9 @@ from .models import (
     University, UniversityStats, Department, 
     Feature, CampusVenue, UniversityImage,
     Dormitory, StudentHouse, Scholarship, News,
-    Lead, Promotion, Review, CampusReel, # Eksik importlar eklendi
-    DormitoryDistance, StudentHouseConnection, # Eksik importlar eklendi
-    DormitoryImage, HouseImage # Eksik importlar eklendi
+    Lead, Promotion, Review, CampusReel,
+    DormitoryDistance, StudentHouseConnection,
+    DormitoryImage, HouseImage
 )
 
 # --- 1. YARDIMCI (INLINE) MODELLER ---
@@ -16,8 +16,7 @@ class UniversityStatsInline(admin.StackedInline):
     can_delete = False
     verbose_name_plural = 'Kalite Puanları (TÜMA)'
     fk_name = 'university'
-    # DÜZELTME: 'general_score' modelinizde YOKTU, kaldırdım.
-    # Modelinizdeki gerçek alanları ekledim.
+    # 'general_score' KESİNLİKLE EKLENMEDİ (Hata kaynağıydı)
     fields = (
         ('source', 'academic_score', 'campus_score'),
         ('social_score', 'career_score', 'tech_score', 'city_score')
@@ -35,13 +34,6 @@ class CampusVenueInline(admin.TabularInline):
     model = CampusVenue
     extra = 0
     fields = ('name', 'venue_type', 'rating', 'distance', 'is_sponsored', 'image')
-
-class DepartmentInline(admin.TabularInline):
-    model = Department
-    extra = 0
-    fields = ('program_code', 'name', 'faculty', 'score_type', 'base_score')
-    show_change_link = True
-    classes = ['collapse'] 
 
 class DormitoryDistanceInline(admin.TabularInline):
     model = DormitoryDistance
@@ -81,31 +73,47 @@ class UniversityAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug')
     prepopulated_fields = {'slug': ('name',)}
 
-    # DETAY SAYFASI DÜZENİ (Modelinizdeki alanlarla birebir eşleşti)
-    fields = (
-        ('name', 'slug'),
-        ('city', 'uni_type', 'founded_year'),
-        ('is_promoted', 'admin_user'), # admin_user modelde vardı, buraya ekledim
-        ('rector', 'technopark'),      # technopark modelde vardı, buraya ekledim
-        ('website', 'email', 'phone'),
-        'description',
-        'address',
-        'video_url', 
-        'map_location',
-        ('student_count', 'student_count_label'),       # Etiket ve Sayı yan yana
-        ('academician_count', 'academic_staff_label'),  # Etiket ve Sayı yan yana
-        ('prof_count', 'doc_count', 'dr_count'),
-        'education_language',
-        ('logo', 'cover_image'),
-        'features'
+    # --- ESKİ TASARIMI GERİ GETİREN KISIM (FIELDSETS) ---
+    # Bu ayar sayesinde sayfa tekrar sekmeli/gruplu görünecek.
+    fieldsets = (
+        ('Temel Bilgiler', {
+            'fields': (
+                ('name', 'slug'),
+                ('city', 'uni_type'),
+                ('founded_year', 'is_promoted'),
+                'admin_user'
+            )
+        }),
+        ('Yönetim ve İletişim', {
+            'fields': (
+                ('rector', 'technopark'),
+                ('website', 'email', 'phone'),
+                'address'
+            )
+        }),
+        ('Detaylar ve Medya', {
+            'fields': (
+                'description',
+                'video_url',
+                'map_location',
+                ('logo', 'cover_image'),
+                'features'
+            )
+        }),
+        ('Sayısal Veriler', {
+            'fields': (
+                ('student_count', 'student_count_label'),
+                ('academician_count', 'academic_staff_label'),
+                ('prof_count', 'doc_count', 'dr_count'),
+                'education_language'
+            )
+        }),
     )
 
-    # INLINE (İÇ İÇE) TABLOLAR
     inlines = [
-        UniversityStatsInline,  # Artık hata vermeyecek (general_score kalktı)
+        UniversityStatsInline,
         UniversityImageInline,
         CampusVenueInline,
-        # DepartmentInline,     # Performans için kapalı (Çok fazla bölüm var)
         DormitoryDistanceInline,
         StudentHouseConnectionInline
     ]
@@ -116,14 +124,13 @@ class DepartmentAdmin(admin.ModelAdmin):
     list_filter = ('score_type', 'university__city', 'education_type')
     search_fields = ('name', 'program_code', 'university__name')
     autocomplete_fields = ['university']
-    list_per_page = 20 # Sayfa çökmesin diye sayfalama
+    list_per_page = 20
 
 @admin.register(UniversityStats)
 class UniversityStatsAdmin(admin.ModelAdmin):
-    # DÜZELTME: general_score burada da kaldırıldı.
     list_display = ('university', 'academic_score', 'campus_score', 'source')
 
-# --- 3. DİĞER TÜM MODELLERİN KAYDI ---
+# --- 3. DİĞER MODELLER ---
 
 @admin.register(CampusVenue)
 class CampusVenueAdmin(admin.ModelAdmin):
@@ -175,6 +182,3 @@ class PromotionAdmin(admin.ModelAdmin):
 @admin.register(Feature)
 class FeatureAdmin(admin.ModelAdmin):
     list_display = ('name', 'icon')
-
-# Basit Kayıtlar
-# admin.site.register() gerek kalmadı, hepsi yukarıda @admin.register ile kapsandı.
