@@ -7,6 +7,7 @@ from .models import (
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
     UniversityStats, UniversityAnalytics, DepartmentStats, Lead, 
     StudentHouseConnection, Promotion, Review, CampusReel, City
+)
 
 # --- 1. CAMPUS REEL (VİDEO GALERİ) ---
 @admin.register(CampusReel)
