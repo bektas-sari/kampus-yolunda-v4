@@ -6,7 +6,7 @@ from .models import (
     StudentHouse, HouseImage, FavoriteStudentHouse, 
     FavoriteUniversity, FavoriteDormitory, Scholarship, News,
     UniversityStats, UniversityAnalytics, DepartmentStats, Lead, 
-    StudentHouseConnection, Promotion, Review, CampusReel, City
+    StudentHouseConnection, Promotion, Review, CampusReel,
 )
 
 # --- 1. CAMPUS REEL (VİDEO GALERİ) ---
@@ -26,21 +26,13 @@ class UniversityStatsInline(admin.StackedInline):
     can_delete = False
     verbose_name_plural = 'Kalite Puanları (TÜMA)'
     fk_name = 'university'
-    # İşte eksik olan kısım burasıydı (Hangi alanlar görünecek?):
     fields = (
         ('general_score', 'academic_score', 'campus_score'),
         ('social_score', 'career_score', 'tech_score'),
         ('city_score', 'source')
     )
-    readonly_fields = ('source',) # Kaynağı elle değiştirmeyelim
+    readonly_fields = ('source',)
     extra = 0
-
-class UniversityAdmin(admin.ModelAdmin):
-    list_display = ('name', 'city', 'type', 'student_count', 'founded_year')
-    search_fields = ('name',)
-    list_filter = ('city', 'type')
-
-    inlines = [UniversityStatsInline]
 
 class UniversityImageInline(admin.TabularInline):
     model = UniversityImage
@@ -90,7 +82,8 @@ class HouseImageInline(admin.TabularInline):
     verbose_name = "Galeri Resmi"
     verbose_name_plural = "Ev Galerisi"
 
-# --- 3. DİĞER ANA ADMIN MODELLERİ ---
+# --- 3. ANA ADMIN MODELLERİ ---
+
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
     list_display = ('author_name', 'content_object', 'rating', 'is_approved', 'created_at')
@@ -126,7 +119,6 @@ class UniversityAdmin(admin.ModelAdmin):
     ]
     
     # Alanları Gruplandırma (Fieldsets)
-    # GÜNCELLEME: Prof/Doc/Dr alanları buradan KALDIRILDI.
     fieldsets = (
         ('Temel Bilgiler', {
             'fields': (
@@ -137,7 +129,7 @@ class UniversityAdmin(admin.ModelAdmin):
         ('İstatistikler ve Sayılar', {
             'fields': (
                 'student_count_label', 'student_count', 
-                'academic_staff_label', 'academician_count', # Sadece toplam sayı
+                'academic_staff_label', 'academician_count',
                 'education_language'
             )
         }),
@@ -249,9 +241,7 @@ class DepartmentStatsAdmin(admin.ModelAdmin):
     list_display = ('department', 'date', 'page_views')
     readonly_fields = ('department', 'date', 'page_views')
 
+# --- 4. BASİT KAYITLAR ---
 admin.site.register(FavoriteUniversity)
 admin.site.register(FavoriteDormitory)
 admin.site.register(FavoriteStudentHouse)
-admin.site.register(University, UniversityAdmin)
-admin.site.register(Department)
-admin.site.register(City)
