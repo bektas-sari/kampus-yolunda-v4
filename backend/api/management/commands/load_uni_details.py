@@ -6,7 +6,25 @@ from api.models import University
 from django.conf import settings
 
 class Command(BaseCommand):
-    help = 'CSV dosyasından Üniversite Detaylarını (Video, Harita vb.) Yükler'
+    help = 'CSV dosyasından Üniversite Detaylarını (Video, Harita vb.) Yükler (Akıllı Eşleştirme)'
+
+    def normalize_name(self, text):
+        """
+        Üniversite isimlerini eşleştirme için standartlaştırır.
+        Örn: "İzmir Yüksek Teknoloji Enstitüsü (İYTE)" -> "izmir yuksek teknoloji enstitusu"
+        """
+        if not text: return ""
+        text = text.lower()
+        # Türkçe karakterleri İngilizce karşılıklarına çevir
+        tr_map = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ç': 'c', 'ğ': 'g', 'İ': 'i'}
+        for k, v in tr_map.items():
+            text = text.replace(k, v)
+        
+        # Parantez içindeki kısaltmaları (İYTE vb.) temizle
+        text = re.sub(r'\s*\(.*?\)', '', text)
+        
+        # Fazla boşlukları temizle
+        return " ".join(text.split())
 
     def parse_count(self, text):
         """ '55.000 - 60.000' veya '3.436+' gibi metinlerden sayı üretir """
@@ -33,8 +51,20 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Dosya bulunamadı: {file_path}"))
             return
 
-        self.stdout.write("🚀 Üniversite Detayları Güncelleniyor...")
+        self.stdout.write("🚀 Üniversite Detayları Güncelleniyor (Akıllı Mod)...")
         
+        # 1. Veritabanındaki Üniversiteleri Hafızaya Al (Normalize Ederek)
+        db_unis = University.objects.all()
+        uni_map = {}
+        for u in db_unis:
+            # Hem orijinal ismini hem de normalize edilmiş halini anahtar yapalım
+            norm = self.normalize_name(u.name)
+            uni_map[norm] = u
+            
+            # Özel Durumlar (Manuel Eşleştirme İhtimaline Karşı)
+            if "iyte" in norm: uni_map["izmir yuksek teknoloji enstitusu"] = u
+            if "katip" in norm: uni_map["izmir katip celebi universitesi"] = u
+
         updated_count = 0
         not_found_count = 0
 
@@ -42,36 +72,38 @@ class Command(BaseCommand):
             reader = csv.DictReader(f)
             
             for row in reader:
-                uni_name = row['universite'].strip()
+                raw_name = row['universite'].strip()
+                search_key = self.normalize_name(raw_name)
                 
-                # Veritabanında üniversiteyi bul (Case insensitive)
-                uni = University.objects.filter(name__icontains=uni_name).first()
+                # Eşleşeni bul
+                uni = uni_map.get(search_key)
+                
+                # Eğer tam eşleşme yoksa "contains" mantığıyla dene
+                if not uni:
+                    for key, val in uni_map.items():
+                        if search_key in key or key in search_key:
+                            uni = val
+                            break
                 
                 if uni:
-                    # --- GÜNCELLENEN ALANLAR (MODEL İLE EŞLEŞTİRİLDİ) ---
-                    
-                    # 1. Kuruluş Yılı
+                    # --- GÜNCELLENEN ALANLAR ---
                     if row['kurulus_yili']:
                         uni.founded_year = int(row['kurulus_yili']) 
                     
-                    # 2. Öğrenci Sayıları
                     uni.student_count_label = row['toplam_ogrenci']
                     uni.student_count = self.parse_count(row['toplam_ogrenci'])
                     
-                    # 3. Akademisyen Sayıları
                     uni.academic_staff_label = row['toplam_akademisyen']
-                    uni.academician_count = self.parse_count(row['toplam_akademisyen']) # Sıralama için sayıya çeviriyoruz
+                    uni.academician_count = self.parse_count(row['toplam_akademisyen'])
                     
-                    # 4. Eğitim ve Diğer
                     uni.education_language = row['egitim_dili']
                     uni.website = self.normalize_url(row['web'])
                     uni.phone = row['telefon']
                     uni.email = row['eposta']
                     uni.address = row['adres']
                     
-                    # 5. Medya (Map & Video)
-                    uni.map_location = row['harita']      # Düzeltildi
-                    uni.video_url = row['tanitim_video']  # Düzeltildi
+                    uni.map_location = row['harita']
+                    uni.video_url = row['tanitim_video']
                     
                     uni.description = row['hakkinda']
                     uni.technopark = row['teknopark']
@@ -79,7 +111,8 @@ class Command(BaseCommand):
                     uni.save()
                     updated_count += 1
                 else:
-                    self.stdout.write(self.style.WARNING(f"⚠️ Bulunamadı: {uni_name}"))
+                    # Hata ayıklama için normalize edilmiş ismini yazdıralım
+                    self.stdout.write(self.style.WARNING(f"⚠️ Bulunamadı: {raw_name} (Aranan Kök: {search_key})"))
                     not_found_count += 1
 
-        self.stdout.write(self.style.SUCCESS(f"🏁 İŞLEM TAMAM: {updated_count} üniversite güncellendi."))
+        self.stdout.write(self.style.SUCCESS(f"🏁 İŞLEM TAMAM: {updated_count} üniversite güncellendi. ({not_found_count} kayıp)"))
